@@ -12,16 +12,14 @@ Si no quieres instalar Git, también puedes bajar el proyecto como ZIP desde la 
 ## Descargar el proyecto
 
 ```bash
-git clone <URL-DEL-REPOSITORIO>
+git clone https://github.com/Drklight5/la-asociacion.git
 ```
-
-*(Reemplaza `<URL-DEL-REPOSITORIO>` por el link real — pídeselo a Valeria si no lo tienes.)*
 
 ## Correrlo
 
-**Windows:** entra a la carpeta `simulator` y haz doble clic en `iniciar.bat`.
+**Windows:** entra a la carpeta `la-asociacion/simulator` y haz doble clic en `iniciar.bat`.
 
-**Mac:** entra a la carpeta `simulator` y haz doble clic en `iniciar.command`. (Si macOS se queja de que es de un desarrollador no identificado: click derecho → Abrir, y confirmar.)
+**Mac:** entra a la carpeta `la-asociacion/simulator` y haz doble clic en `iniciar.command`. (Si macOS se queja de que es de un desarrollador no identificado: click derecho → Abrir, y confirmar.)
 
 Eso instala lo necesario la primera vez y arranca el simulador. Vas a ver algo como:
 
@@ -33,7 +31,7 @@ Fase inicial: calibrando (calibracion 60s)
 ### Si prefieres usar la terminal en vez de doble clic
 
 ```bash
-cd la_asociacion/simulator
+cd la-asociacion/simulator
 npm install
 npm start
 ```
