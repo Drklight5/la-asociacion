@@ -1,4 +1,4 @@
-# Simulador EEG — guía rápida para producción
+# Simulador EEG 
 
 Esto genera datos falsos de EEG/BPM/movimiento (como los que va a mandar el Muse 2 real) y se los manda a Pure Data por la red. Sirve para probar el patch sin tener el dispositivo puesto.
 
@@ -7,7 +7,7 @@ Esto genera datos falsos de EEG/BPM/movimiento (como los que va a mandar el Muse
 1. **Git** — para bajar el proyecto. Si no lo tienes: https://git-scm.com/downloads
 2. **Node.js** — para correr el simulador. Si no lo tienes: https://nodejs.org (elige la versión **LTS**)
 
-Si no quieres instalar Git, también puedes bajar el proyecto como ZIP desde la página del repositorio (botón "Code" → "Download ZIP") y descomprimirlo.
+Si no quieres instalar Git, también puedes bajar el proyecto como ZIP desde la página del repositorio (botón "Code" -> "Download ZIP") y descomprimirlo.
 
 ## Descargar el proyecto
 
