@@ -1,7 +1,7 @@
 // Genera datos sinteticos de EEG/BPM/movimiento que imitan lo que mandaria
 // un Muse 2 real, siguiendo el esquema descrito en ABOUT.md:
 //   waves: { delta, theta, beta, alfa, gamma }  -> 0..1
-//   bps:   ritmo cardiaco (bpm)
+//   bpm:   ritmo cardiaco (bpm)
 //   movement: 0..1
 //   moment: "calibrando" | "operando" | "movimiento_abrupto"
 
@@ -59,18 +59,18 @@ export class EEGSimulator {
   /**
    * @param {object} opts
    * @param {number} opts.calibrationSeconds duracion de la fase de calibracion
-   * @param {number} opts.baselineBps bpm de reposo aproximado
+   * @param {number} opts.baselinebpm bpm de reposo aproximado
    */
-  constructor({ calibrationSeconds = 60, baselineBps = 72 } = {}) {
+  constructor({ calibrationSeconds = 60, baselinebpm = 72 } = {}) {
     this.calibrationSeconds = calibrationSeconds;
-    this.baselineBps = baselineBps;
+    this.baselinebpm = baselinebpm;
 
     this.bands = Object.fromEntries(
       BANDS.map((name) => [name, new Band(BAND_PROFILE[name])])
     );
 
-    this.bps = baselineBps;
-    this.bpsTarget = baselineBps;
+    this.bpm = baselinebpm;
+    this.bpmTarget = baselinebpm;
     this.movement = 0.05;
     this.movementTarget = 0.05;
 
@@ -101,7 +101,7 @@ export class EEGSimulator {
     this.kickElapsed = 0;
     this._enterPhase(MOMENT.MOVIMIENTO_ABRUPTO);
     this.movementTarget = 1;
-    this.bpsTarget = clamp(this.baselineBps + 35 + randNormal() * 8, 40, 200);
+    this.bpmTarget = clamp(this.baselinebpm + 35 + randNormal() * 8, 40, 200);
     return true;
   }
 
@@ -111,8 +111,8 @@ export class EEGSimulator {
     this.kickEnergy = 0;
     this.movement = 0.05;
     this.movementTarget = 0.05;
-    this.bps = this.baselineBps;
-    this.bpsTarget = this.baselineBps;
+    this.bpm = this.baselinebpm;
+    this.bpmTarget = this.baselinebpm;
     for (const band of Object.values(this.bands)) {
       band.value = band.profile.baseline;
       band.target = band.profile.baseline;
@@ -163,13 +163,13 @@ export class EEGSimulator {
 
     // BPM: deriva lenta en reposo, sube con la patada y baja de vuelta.
     if (this.kickEnergy <= 0.02) {
-      this.bpsTarget = clamp(
-        this.baselineBps + randNormal() * 3,
-        this.baselineBps - 10,
-        this.baselineBps + 15
+      this.bpmTarget = clamp(
+        this.baselinebpm + randNormal() * 3,
+        this.baselinebpm - 10,
+        this.baselinebpm + 15
       );
     }
-    this.bps += (this.bpsTarget - this.bps) * clamp(dt * 0.8, 0, 1);
+    this.bpm += (this.bpmTarget - this.bpm) * clamp(dt * 0.8, 0, 1);
 
     // Bandas: la patada mete un "artefacto de movimiento" tipico de EEG real
     // (ruido de alta frecuencia en beta/gamma).
@@ -182,7 +182,7 @@ export class EEGSimulator {
 
     return {
       waves,
-      bps: Math.round(this.bps),
+      bpm: Math.round(this.bpm),
       movement: Number(this.movement.toFixed(3)),
       moment: this.phase,
     };

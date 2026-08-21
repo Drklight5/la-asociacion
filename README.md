@@ -29,7 +29,7 @@ Por cada "frame" se mandan estos valores, como mensajes OSC independientes:
 | waves.beta | `/eeg/wave/beta` | 0–1 | presencia normalizada de onda beta |
 | waves.alfa | `/eeg/wave/alfa` | 0–1 | presencia normalizada de onda alfa |
 | waves.gamma | `/eeg/wave/gamma` | 0–1 | presencia normalizada de onda gamma |
-| bps | `/eeg/bps` | ~40–200 | ritmo cardiaco |
+| bpm | `/eeg/bpm` | ~40–200 | ritmo cardiaco |
 | movement | `/eeg/movement` | 0–1 | presencia de movimiento (giroscopio/señal) |
 | moment | `/eeg/moment` | `calibrando` \| `operando` \| `movimiento_abrupto` | fase de la intervención |
 
@@ -74,8 +74,8 @@ Para dejarlo corriendo solo (sin nadie escribiendo comandos, p. ej. en un servid
 
 1. Abre `pd/eeg_receiver_test.pd` en Pure Data.
 2. Corre el simulador (`npm start` dentro de `simulator/`).
-3. Deberías ver en la consola de Pd los valores llegando (`wave: delta 0.5x`, `bps: 72`, `movement: 0.0x`, `moment: calibrando`, etc.).
-4. Escribe `kick` en la terminal del simulador y confirma que `moment` cambia a `movimiento_abrupto` y que `movement`/`bps` suben.
+3. Deberías ver en la consola de Pd los valores llegando (`wave: delta 0.5x`, `bpm: 72`, `movement: 0.0x`, `moment: calibrando`, etc.).
+4. Escribe `kick` en la terminal del simulador y confirma que `moment` cambia a `movimiento_abrupto` y que `movement`/`bpm` suben.
 
 ## Correrlo en la nube (para que el equipo de producción lo tenga sin depender de ti)
 

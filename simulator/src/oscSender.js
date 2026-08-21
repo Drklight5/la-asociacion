@@ -7,7 +7,7 @@ export const OSC_ADDRESSES = {
   beta: "/eeg/wave/beta",
   alfa: "/eeg/wave/alfa",
   gamma: "/eeg/wave/gamma",
-  bps: "/eeg/bps",
+  bpm: "/eeg/bpm",
   movement: "/eeg/movement",
   moment: "/eeg/moment",
 };
@@ -20,13 +20,13 @@ export class OscFrameSender {
   }
 
   send(frame) {
-    const { waves, bps, movement, moment } = frame;
+    const { waves, bpm, movement, moment } = frame;
     this.client.send(OSC_ADDRESSES.delta, waves.delta);
     this.client.send(OSC_ADDRESSES.theta, waves.theta);
     this.client.send(OSC_ADDRESSES.beta, waves.beta);
     this.client.send(OSC_ADDRESSES.alfa, waves.alfa);
     this.client.send(OSC_ADDRESSES.gamma, waves.gamma);
-    this.client.send(OSC_ADDRESSES.bps, bps);
+    this.client.send(OSC_ADDRESSES.bpm, bpm);
     this.client.send(OSC_ADDRESSES.movement, movement);
     this.client.send(OSC_ADDRESSES.moment, moment);
   }

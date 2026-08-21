@@ -13,7 +13,7 @@ const { values: args } = parseArgs({
     port: { type: "string", default: env.EEG_SIM_PORT ?? "9000" },
     rate: { type: "string", default: env.EEG_SIM_RATE ?? "10" }, // mensajes por segundo
     calibration: { type: "string", default: env.EEG_SIM_CALIBRATION ?? "60" }, // segundos
-    "baseline-bps": { type: "string", default: env.EEG_SIM_BASELINE_BPS ?? "72" },
+    "baseline-bpm": { type: "string", default: env.EEG_SIM_BASELINE_bpm ?? "72" },
     // segundos dentro de "operando" antes de patear solo; si no se da, solo manual (o auto-loop decide)
     "auto-kick-after": { type: "string", default: env.EEG_SIM_AUTO_KICK_AFTER },
     "skip-calibration": { type: "boolean", default: env.EEG_SIM_SKIP_CALIBRATION === "true" },
@@ -35,7 +35,7 @@ Uso: node src/index.js [opciones]
   --port <n>                Puerto UDP de Pure Data (default 9000)
   --rate <hz>                Frecuencia de envio en mensajes/seg (default 10)
   --calibration <seg>        Duracion de la fase de calibracion (default 60)
-  --baseline-bps <n>         BPM de reposo aproximado (default 72)
+  --baseline-bpm <n>         BPM de reposo aproximado (default 72)
   --auto-kick-after <seg>    Si se da, patea solo despues de N segundos en "operando"
   --skip-calibration         Arranca directo en fase "operando" (util para pruebas)
   --auto-loop                Repite el ciclo completo solo (para correr sin nadie enfrente, p.ej. en la nube)
@@ -43,7 +43,7 @@ Uso: node src/index.js [opciones]
   --help                     Muestra esta ayuda
 
 Todas las opciones tambien se pueden fijar por variable de entorno (EEG_SIM_HOST,
-EEG_SIM_PORT, EEG_SIM_RATE, EEG_SIM_CALIBRATION, EEG_SIM_BASELINE_BPS,
+EEG_SIM_PORT, EEG_SIM_RATE, EEG_SIM_CALIBRATION, EEG_SIM_BASELINE_bpm,
 EEG_SIM_AUTO_KICK_AFTER, EEG_SIM_SKIP_CALIBRATION, EEG_SIM_AUTO_LOOP,
 EEG_SIM_POST_KICK_SECONDS) - util para systemd/.env en un servidor.
 
@@ -60,7 +60,7 @@ const host = args.host;
 const port = Number(args.port);
 const rateHz = Number(args.rate);
 const calibrationSeconds = Number(args.calibration);
-const baselineBps = Number(args["baseline-bps"]);
+const baselinebpm = Number(args["baseline-bpm"]);
 const autoKickAfter = args["auto-kick-after"] !== undefined ? Number(args["auto-kick-after"]) : null;
 const autoLoop = args["auto-loop"];
 const postKickSeconds = Number(args["post-kick-seconds"]);
@@ -71,7 +71,7 @@ const effectiveAutoKickAfter = autoLoop && autoKickAfter === null
   ? 15 + Math.random() * 30
   : autoKickAfter;
 
-const sim = new EEGSimulator({ calibrationSeconds, baselineBps });
+const sim = new EEGSimulator({ calibrationSeconds, baselinebpm });
 const sender = new OscFrameSender(host, port);
 
 if (args["skip-calibration"]) {

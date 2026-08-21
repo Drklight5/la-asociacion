@@ -19,7 +19,7 @@ git clone https://github.com/Drklight5/la-asociacion.git
 
 **Windows:** entra a la carpeta `la-asociacion/simulator` y haz doble clic en `iniciar.bat`.
 
-**Mac:** entra a la carpeta `la-asociacion/simulator` y haz doble clic en `iniciar.command`. (Si macOS se queja de que es de un desarrollador no identificado: click derecho → Abrir, y confirmar.)
+**Mac:** entra a la carpeta `la-asociacion/simulator` y haz doble clic en `iniciar.command`. (Si macOS se queja de que es de un desarrollador no identificado: click derecho -> Abrir, y confirmar.)
 
 Eso instala lo necesario la primera vez y arranca el simulador. Vas a ver algo como:
 
@@ -50,11 +50,11 @@ Escribe cualquiera de estos y presiona Enter:
 ## Ver los datos llegando en Pure Data
 
 1. Abre `pd/eeg_receiver_test.pd` (está en la carpeta principal del proyecto, no dentro de `simulator`) con Pure Data.
-2. Con el simulador corriendo, deberías ver en la consola de Pd los valores de `delta`, `theta`, `beta`, `alfa`, `gamma`, `bps`, `movement` y `moment` actualizándose solos.
+2. Con el simulador corriendo, deberías ver en la consola de Pd los valores de `delta`, `theta`, `beta`, `alfa`, `gamma`, `bpm`, `movement` y `moment` actualizándose solos.
 3. Para su propio patch de producción: escuchen en `netreceive -u -b 9000` (mismo puerto que usa el simulador) y usen el patrón de `route` de `eeg_receiver_test.pd` como referencia — el detalle del formato de datos está en [README.md](README.md).
 
 ## Si algo no funciona
 
-- **"No se encontro Node.js"** → instala Node.js (link arriba) y vuelve a intentar.
-- **No llega nada a Pd** → confirma que el simulador y Pd corren en la **misma computadora** (o misma red), y que el puerto en Pd (`netreceive -u -b 9000`) coincide con el del simulador.
-- **Quieren correr el simulador en una máquina y Pd en otra** → eso necesita un paso extra de red (ver [DEPLOY.md](DEPLOY.md)), avísenle a Valeria.
+- **"No se encontro Node.js"** -> instala Node.js (link arriba) y vuelve a intentar.
+- **No llega nada a Pd** -> confirma que el simulador y Pd corren en la **misma computadora** (o misma red), y que el puerto en Pd (`netreceive -u -b 9000`) coincide con el del simulador.
+- **Quieren correr el simulador en una máquina y Pd en otra** -> eso necesita un paso extra de red (ver [DEPLOY.md](DEPLOY.md)), avísenle a Valeria.

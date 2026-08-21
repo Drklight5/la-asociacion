@@ -15,7 +15,7 @@ El objetivo de este repositorio es hacer la conexión y una interfaz sencilla co
 
 El archivo que se debe mandar debe tener los siguientes datos.
 waves son valores de 0 a 1 normalizados de la presencia de esas ondas en cierto momento.
-bps es el ritmo cardiaco.
+bpm es el ritmo cardiaco.
 movement es un valor de 0 a 1 que es la cantidad de presencia movimiento por el giroscopio o en la señal.
 moment es un campo para indicar si se encuentra calibrando, operando o si detecta que hubo un movimiento abrupto que pudo .significar que se pateó la pelota.
 
@@ -26,7 +26,7 @@ moment es un campo para indicar si se encuentra calibrando, operando o si detect
 - - alfa 
 - - gamma
 
-- bps
+- bpm
 - movement 
 - moment
 

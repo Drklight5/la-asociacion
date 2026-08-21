@@ -7,9 +7,9 @@
 #X obj 20 140 oscparse;
 #X obj 20 180 route eeg;
 #X obj 300 220 print no-es-eeg;
-#X obj 20 220 route wave bps movement moment;
+#X obj 20 220 route wave bpm movement moment;
 #X obj 20 280 print wave;
-#X obj 140 280 print bps;
+#X obj 140 280 print bpm;
 #X obj 260 280 print movement;
 #X obj 20 320 print moment;
 #X obj 140 320 print otro-eeg;
