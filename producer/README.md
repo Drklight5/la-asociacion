@@ -9,25 +9,13 @@ simulador y se prende esto.
 Muse 2 --BLE--> BlueMuse (Win) / muselsl (Mac) --LSL--> muse_producer.py --OSC/UDP--> Pure Data
 ```
 
-## 1. Conectar el Muse 2 (BLE → LSL)
-
-**Windows** — usar [BlueMuse](https://github.com/kowalej/BlueMuse): conectar el
-Muse 2 ahí y darle "Start Streaming". Si querés `movement`/`bpm` reales,
-habilitar ACC/GYRO/PPG en la configuración de BlueMuse antes de streamear.
-
-**macOS** (Apple Silicon, sin apps extra):
-```bash
-muselsl stream --name "Muse-XXXX" --acc --gyro --ppg
-```
-(`--acc --gyro --ppg` son opcionales — sin ellos, el productor igual manda el
-protocolo completo, con `movement=0` y `bpm` fijo. Ver [3. Correrlo](#3-correrlo).)
-
-## 2. Instalar
+## 1. Instalar
+> Usar python3 y pip3 como alternativa si los comandos no funcionan 
 
 **macOS** — si no tenés Python 3 instalado (`python3 --version` para chequear):
 
 ```bash
-# si tampoco tenés Homebrew:
+# si tampoco tienes Homebrew:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
 brew install python
@@ -39,6 +27,23 @@ python -m venv .venv
 # Windows: .venv\Scripts\activate | Mac: source .venv/bin/activate
 pip install -r requirements.txt
 ```
+> Editar requirements.txt con python-osc>=1.8.3 si la version 1.9 no es soportada
+
+## 2. Conectar el Muse 2 (BLE → LSL)
+
+**Windows** — usar [BlueMuse](https://github.com/kowalej/BlueMuse): conectar el
+Muse 2 ahí y darle "Start Streaming". Si querés `movement`/`bpm` reales,
+habilitar ACC/GYRO/PPG en la configuración de BlueMuse antes de streamear.
+
+**macOS** (Apple Silicon, sin apps extra):
+```bash
+muselsl stream --name "Muse-XXXX" --acc --gyro --ppg
+```
+> Nuestro dispositivo es 3745
+> agregar python3 -m al comando si no funciona 
+
+(`--acc --gyro --ppg` son opcionales — sin ellos, el productor igual manda el
+protocolo completo, con `movement=0` y `bpm` fijo. Ver [3. Correrlo](#3-correrlo).)
 
 ## 3. Correrlo
 
