@@ -24,6 +24,15 @@ protocolo completo, con `movement=0` y `bpm` fijo. Ver [3. Correrlo](#3-correrlo
 
 ## 2. Instalar
 
+**macOS** — si no tenés Python 3 instalado (`python3 --version` para chequear):
+
+```bash
+# si tampoco tenés Homebrew:
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
+brew install python
+```
+
 ```bash
 cd producer
 python -m venv .venv
