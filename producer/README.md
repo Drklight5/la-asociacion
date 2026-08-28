@@ -1,87 +1,74 @@
 # Productor real (Muse 2 → OSC → Pure Data)
 
-Reemplaza a `simulator/` cuando el Muse 2 real está puesto. Manda **exactamente
-el mismo protocolo OSC** que el simulador (mismas direcciones, mismo puerto
-9000 por default) — el patch de Pd no se toca para nada, solo se apaga el
-simulador y se prende esto.
+Reemplaza a `simulator/` cuando el Muse 2 real está puesto. Mismo protocolo
+OSC, mismo puerto 9000 — el patch de Pd no cambia.
 
 ```
 Muse 2 --BLE--> BlueMuse (Win) / muselsl (Mac) --LSL--> muse_producer.py --OSC/UDP--> Pure Data
 ```
 
-## 1. Conectar el Muse 2 (BLE → LSL)
+## Instalar (una vez)
 
-**Windows** — usar [BlueMuse](https://github.com/kowalej/BlueMuse): conectar el
-Muse 2 ahí y darle "Start Streaming". Si querés `movement`/`bpm` reales,
-habilitar ACC/GYRO/PPG en la configuración de BlueMuse antes de streamear.
-
-**macOS** (Apple Silicon, sin apps extra):
+**macOS**, si falta Python:
 ```bash
-muselsl stream --name "Muse-XXXX" --acc --gyro --ppg
-```
-(`--acc --gyro --ppg` son opcionales — sin ellos, el productor igual manda el
-protocolo completo, con `movement=0` y `bpm` fijo. Ver [3. Correrlo](#3-correrlo).)
-
-## 2. Instalar
-
-**macOS** — si no tenés Python 3 instalado (`python3 --version` para chequear):
-
-```bash
-# si tampoco tenés Homebrew:
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"  # si tampoco tenés Homebrew
 brew install python
 ```
 
 ```bash
 cd producer
-python -m venv .venv
-# Windows: .venv\Scripts\activate | Mac: source .venv/bin/activate
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip3 install -r requirements.txt
 ```
 
-## 3. Correrlo
+## Correrlo -- son 2 terminales
 
-Con el stream LSL del paso 1 activo:
+**Terminal 1 — conectar el Muse (BLE → LSL):**
+
+- Windows: abrir [BlueMuse](https://github.com/kowalej/BlueMuse), conectar el Muse 2, "Start Streaming".
+- Mac:
+  ```bash
+  python3 -m muselsl stream --name "Muse-XXXX" --acc --gyro --ppg
+  ```
+  (`--acc --gyro --ppg` son opcionales; sin ellos, `movement`/`bpm` quedan en valores fijos.)
+
+Dejar esta terminal corriendo.
+
+**Terminal 2 — mandar los datos a Pd:**
 
 ```bash
-python muse_producer.py --host 127.0.0.1 --port 9000
+cd producer && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+python3 muse_producer.py --host 127.0.0.1 --port 9000
 ```
 
-Mismos comandos que el simulador mientras corre (`kick`, `skip`, `reset`, `quit` + Enter).
+Comandos mientras corre: `kick`, `skip`, `reset`, `quit` + Enter.
 
-### Calibrar `movement` con el dispositivo real
+## Calibrar `movement` (ejemplo)
 
-`--movement-scale` y `--kick-threshold` no se pueden adivinar sin probar con
-el Muse puesto — dependen de la sensibilidad real del gyro y de qué tan fuerte
-se sacude la cabeza al patear. Pasos:
+```bash
+python3 muse_producer.py --debug
+```
 
-1. Correr con `--debug` y el Muse puesto: `python muse_producer.py --debug`.
-2. Ver el valor de `movement` en reposo (parado, quieto) — debería rondar 0.05–0.15.
-3. Simular la patada (sacudir la cabeza fuerte, o patear de verdad) y ver a
-   qué valor de `movement` llega.
-4. Ajustar `--movement-scale` hasta que el reposo dé ~0.1 y el movimiento
-   fuerte se acerque a 1.0. Si el kick automático no dispara o dispara con
-   cualquier movimiento, ajustar `--kick-threshold` (default 0.6).
+```
+# quieto:           movement=0.08 (mag=4.2)
+# patada/sacudida:  movement=1.000 (mag=61.5)
+```
 
-Si no hay stream GYRO/ACC (no se pasó `--gyro`/`--acc` a `muselsl stream`, o
-BlueMuse no los tiene habilitados), `movement` queda fijo en un valor bajo y
-la patada solo se dispara con el comando manual `kick`.
+Si en reposo ya da alto, o la patada nunca llega a 1.0, subí `--movement-scale`
+(default 50) hasta que reposo ≈ 0.1 y patada ≈ 1.0:
 
-### Correrlo sin pasar flags (`.env`)
+```bash
+python3 muse_producer.py --movement-scale 60
+```
 
-Igual que `simulator/`: copiá [.env.example](.env.example) a `.env` y ajustá
-los valores — útil para dejarlo configurado una vez (por ejemplo en el
-`EnvironmentFile=` de un servicio systemd) sin tener que escribir los flags
-cada vez. Un flag por línea de comandos siempre gana sobre el `.env`.
+Sin stream GYRO/ACC, `movement` queda fijo y la patada solo se dispara con `kick`.
+
+## Sin pasar flags (`.env`)
+
+Copiá [.env.example](.env.example) a `.env` (mismas variables, prefijo `EEG_PRODUCER_`). Un flag por CLI siempre gana sobre el `.env`.
 
 ## Notas
 
-- El detalle completo del protocolo (direcciones OSC, rangos, los 3 momentos)
-  está en el [README.md](../README.md) del proyecto — es el mismo contrato
-  que usa `simulator/`, no se repite acá.
-- `bpm` real requiere el canal PPG del Muse 2 (`--ppg`); se calcula con
-  detección de picos sobre la señal filtrada. Es una estimación básica —
-  esperá ruido durante movimiento fuerte (igual que le pasaría a cualquier
-  sensor óptico de pulso puesto en la frente de alguien que se está moviendo).
-- Sin PPG, `bpm` se manda fijo en `--baseline-bpm` (default 72).
+- Protocolo completo (direcciones OSC, rangos, momentos): [README.md](../README.md) del proyecto.
+- `bpm` real necesita `--ppg`; sin eso, queda fijo en `--baseline-bpm` (default 72).
