@@ -1,0 +1,5 @@
+muselsl==2.5.1
+pylsl>=1.16.2
+numpy>=1.26
+scipy>=1.11
+python-osc>=1.9

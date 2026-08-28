@@ -81,12 +81,10 @@ Para dejarlo corriendo solo (sin nadie escribiendo comandos, p. ej. en un servid
 
 Ver [DEPLOY.md](DEPLOY.md) — VPS chica + Tailscale para que Pd reciba los datos sin abrir puertos en su router, y el patch de Pd nunca tiene que cambiar cuando después se conecte el Muse 2 real.
 
-## Siguiente paso: dispositivo real
+## Dispositivo real
 
-Cuando se conecte el Muse 2 real, la ruta natural (documentada por la comunidad) es:
-
-```
-Muse 2 --BLE--> muselsl / BrainFlow (Python, LSL) --> productor OSC --> Pure Data
-```
-
-Se puede mantener `simulator/src/oscSender.js` como referencia del formato de mensajes esperado y escribir un nuevo productor (probablemente en Python, ya que `muselsl`/`BrainFlow` son las librerías estándar para Muse 2) que calcule las bandas de potencia normalizadas, BPM y movimiento a partir de la señal real, y reutilice exactamente las mismas direcciones OSC — así el patch de Pure Data de producción no tiene que cambiar.
+Ya implementado en [producer/](producer/) — un productor en Python
+(`muselsl` + LSL) que reemplaza a `simulator/` y manda exactamente las mismas
+direcciones OSC descritas arriba, así el patch de Pd no cambia. Ver
+[producer/README.md](producer/README.md) para conectar el Muse 2 real
+(Windows/BlueMuse o macOS/`muselsl`) y correrlo.

@@ -1,3 +1,8 @@
 node_modules/
 .env
 *.log
+
+# producer/ (Python)
+.venv/
+__pycache__/
+*.pyc
