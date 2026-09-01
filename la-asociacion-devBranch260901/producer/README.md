@@ -1,7 +1,9 @@
 # Productor real (Muse 2 → OSC → Pure Data)
 
-Reemplaza a `simulator/` cuando el Muse 2 real está puesto. Mismo protocolo
-OSC, mismo puerto 9000 — el patch de Pd no cambia.
+Reemplaza a `simulator/` cuando el Muse 2 real está puesto. Manda **exactamente
+el mismo protocolo OSC** que el simulador (mismas direcciones, mismo puerto
+9000 por default) — el patch de Pd no se toca para nada, solo se apaga el
+simulador y se prende esto.
 
 ```
 Muse 2 --BLE--> BlueMuse (Win) / muselsl (Mac) --LSL--> muse_producer.py --OSC/UDP--> Pure Data
@@ -71,11 +73,20 @@ Si no hay stream GYRO/ACC (no se pasó `--gyro`/`--acc` a `muselsl stream`, o
 BlueMuse no los tiene habilitados), `movement` queda fijo en un valor bajo y
 la patada solo se dispara con el comando manual `kick`.
 
-## Sin pasar flags (`.env`)
+### Correrlo sin pasar flags (`.env`)
 
-Copiá [.env.example](.env.example) a `.env` (mismas variables, prefijo `EEG_PRODUCER_`). Un flag por CLI siempre gana sobre el `.env`.
+Igual que `simulator/`: copiá [.env.example](.env.example) a `.env` y ajustá
+los valores — útil para dejarlo configurado una vez (por ejemplo en el
+`EnvironmentFile=` de un servicio systemd) sin tener que escribir los flags
+cada vez. Un flag por línea de comandos siempre gana sobre el `.env`.
 
 ## Notas
 
-- Protocolo completo (direcciones OSC, rangos, momentos): [README.md](../README.md) del proyecto.
-- `bpm` real necesita `--ppg`; sin eso, queda fijo en `--baseline-bpm` (default 72).
+- El detalle completo del protocolo (direcciones OSC, rangos, los 3 momentos)
+  está en el [README.md](../README.md) del proyecto — es el mismo contrato
+  que usa `simulator/`, no se repite acá.
+- `bpm` real requiere el canal PPG del Muse 2 (`--ppg`); se calcula con
+  detección de picos sobre la señal filtrada. Es una estimación básica —
+  esperá ruido durante movimiento fuerte (igual que le pasaría a cualquier
+  sensor óptico de pulso puesto en la frente de alguien que se está moviendo).
+- Sin PPG, `bpm` se manda fijo en `--baseline-bpm` (default 72).
