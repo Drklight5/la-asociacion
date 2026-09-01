@@ -16,16 +16,28 @@ protocolo completo con valores de respaldo, para no romper el contrato con Pd):
   - PPG      -> `bpm` real via deteccion de picos (si no hay, se manda
     --baseline-bpm fijo).
 
-Protocolo OSC (igual que simulator/src/oscSender.js -- ver README.md del
-proyecto para la tabla completa):
-  /eeg/wave/delta   float 0-1  (potencia relativa de la banda)
-  /eeg/wave/theta   float 0-1
-  /eeg/wave/beta    float 0-1
-  /eeg/wave/alfa    float 0-1
-  /eeg/wave/gamma   float 0-1
+Protocolo OSC (mismas direcciones/rangos que simulator/src/oscSender.js -- ver
+README.md del proyecto para la tabla completa; la SEMANTICA de las waves
+cambio, ver nota de calibracion de bandas mas abajo):
+  /eeg/wave/delta   float 0-1  (que tan arriba del reposo de ESTA persona
+  /eeg/wave/theta   float 0-1   esta esta banda ahora mismo -- 0.5 = igual
+  /eeg/wave/beta    float 0-1   que su baseline, 1.0 = muy por encima, 0.0 =
+  /eeg/wave/alfa    float 0-1   muy por debajo. Las 5 son independientes y
+  /eeg/wave/gamma   float 0-1   YA NO suman ~1 entre si -- ver BandPowerTracker)
   /eeg/bpm          ~40-200
   /eeg/movement     float 0-1
   /eeg/moment       "calibrando" | "operando" | "movimiento_abrupto"
+
+NOTA sobre calibracion de bandas (por que delta/theta ya no dominan todo el
+tiempo): el espectro EEG cae ~1/f con la frecuencia -- delta (1-4Hz) tiene
+ordenes de magnitud mas potencia absoluta que gamma (30-45Hz) SIEMPRE, sin
+importar el estado mental de la persona. Antes esta clase dividia cada banda
+entre la suma de las 5 ("potencia relativa"), lo que hacia que delta/theta
+dominaran el 0..1 en cualquier sesion real. Ahora cada banda se compara
+contra SU PROPIO reposo, capturado durante los primeros `--calibration`
+segundos de la sesion (igual haya o no fase "calibrando" visible -- ver
+`--skip-calibration`), siguiendo el mismo patron que usan muse-lsl/
+bci-workshop (log10 de la potencia + z-score contra mean/std de calibracion).
 
 IMPORTANTE: `--movement-scale` y `--kick-threshold` son valores que dependen
 del dispositivo/persona real y NO se pueden adivinar sin probar con el Muse
@@ -81,26 +93,86 @@ def clamp(value, lo=0.0, hi=1.0):
 
 
 # ---------------------------------------------------------------------------
-# Bandas de EEG -> potencia relativa 0..1 (igual semantica que "presencia
-# normalizada" del simulador: las 5 bandas sirven de referencia entre si)
+# Nombres de canal del stream EEG -> nos quedamos solo con los 4 electrodos
+# reales (TP9/AF7/AF8/TP10). El Muse 2 manda un 5to canal ("Right AUX") sin
+# electrodo util conectado -- promediarlo junto con los otros 4 solo mete
+# ruido/deriva de baja frecuencia (justo lo que infla delta). El pipeline
+# hermano de este (C:\V\Muse\muse_osc.py) ya descarta este canal asi; misma
+# logica aca para que ambos midan lo mismo.
+# ---------------------------------------------------------------------------
+STANDARD_EEG_CHANNELS = ["TP9", "AF7", "AF8", "TP10"]
+
+
+def read_channel_names(info):
+    n_channels = info.channel_count()
+    names = []
+    ch = info.desc().child("channels").child("channel")
+    for _ in range(n_channels):
+        names.append(ch.child_value("label"))
+        ch = ch.next_sibling()
+    return names
+
+
+def select_eeg_channels(names):
+    indices = [names.index(n) for n in STANDARD_EEG_CHANNELS if n in names]
+    if len(indices) != len(STANDARD_EEG_CHANNELS):
+        print(f"[aviso] canales EEG inesperados {names} -- se usan todos (puede incluir AUX/ruido)")
+        return list(range(len(names)))
+    return indices
+
+
+class _RunningStats:
+    """Media/desvio estandar online (Welford) -- usado para el baseline de
+    calibracion de cada banda. No hace falta guardar todas las muestras."""
+
+    def __init__(self):
+        self.n = 0
+        self.mean = 0.0
+        self._m2 = 0.0
+
+    def update(self, x):
+        self.n += 1
+        delta = x - self.mean
+        self.mean += delta / self.n
+        self._m2 += delta * (x - self.mean)
+
+    @property
+    def std(self):
+        return (self._m2 / (self.n - 1)) ** 0.5 if self.n >= 2 else 0.0
+
+
+# Muestras minimas de baseline antes de confiar en el z-score (a
+# update_interval_s=0.5 son ~3s) -- con menos que esto el desvio estandar es
+# demasiado ruidoso y una sola muestra rara dispararia el z-score.
+BASELINE_MIN_SAMPLES = 6
+
+
+# ---------------------------------------------------------------------------
+# Bandas de EEG -> 0..1 por banda, cada una comparada contra SU PROPIO
+# reposo (ver nota de calibracion de bandas en el docstring del modulo).
 # ---------------------------------------------------------------------------
 class BandPowerTracker:
-    def __init__(self, inlet, window_s=2.0, update_interval_s=0.5):
+    def __init__(self, inlet, calibration_s, window_s=2.0, update_interval_s=0.5, smoothing=0.25):
         info = inlet.info()
         self.inlet = inlet
         self.sfreq = info.nominal_srate()
-        self.n_channels = info.channel_count()
+        self.channel_indices = select_eeg_channels(read_channel_names(info))
+        self.n_channels = len(self.channel_indices)
         self.buf_len = max(int(window_s * self.sfreq), 64)
         self.buffers = [deque(maxlen=self.buf_len) for _ in range(self.n_channels)]
         self.update_interval_s = update_interval_s
         self._last_update = 0.0
-        self.waves = {name: 0.2 for name in BANDS}  # arranca parejo hasta tener datos
+        self.smoothing = smoothing
+        self.calibration_s = calibration_s
+        self._start = None  # se fija en el primer poll(), no en __init__
+        self._baseline = {name: _RunningStats() for name in BANDS}
+        self.waves = {name: 0.5 for name in BANDS}  # arranca neutro hasta tener baseline
 
     def poll(self, now):
         samples, _ = self.inlet.pull_chunk(timeout=0.0, max_samples=int(self.sfreq))
         for sample in samples:
-            for i, val in enumerate(sample):
-                self.buffers[i].append(val)
+            for buf_i, ch_i in enumerate(self.channel_indices):
+                self.buffers[buf_i].append(sample[ch_i])
 
         if now - self._last_update < self.update_interval_s:
             return
@@ -108,15 +180,32 @@ class BandPowerTracker:
             return
         self._last_update = now
 
+        if self._start is None:
+            self._start = now
+        collecting_baseline = (now - self._start) < self.calibration_s
+
         window = np.array(self.buffers).T  # (n_samples, n_channels)
-        freqs, psd = welch(window, fs=self.sfreq, nperseg=min(256, window.shape[0]), axis=0)
-        raw = {}
+        freqs, psd = welch(
+            window, fs=self.sfreq, nperseg=min(256, window.shape[0]), detrend="linear", axis=0
+        )
         for name, (lo, hi) in BANDS.items():
             mask = (freqs >= lo) & (freqs < hi)
-            raw[name] = float(psd[mask].mean(axis=0).mean())  # promedio entre canales
+            band_power = float(psd[mask].mean(axis=0).mean())  # promedio entre los 4 canales
+            log_power = np.log10(max(band_power, 1e-12))  # log10 = "absolute band power" del SDK de Muse
 
-        total = sum(raw.values()) or 1.0
-        self.waves = {name: clamp(val / total) for name, val in raw.items()}
+            stats = self._baseline[name]
+            if collecting_baseline:
+                stats.update(log_power)
+
+            if stats.n >= BASELINE_MIN_SAMPLES:
+                z = (log_power - stats.mean) / (stats.std or 1.0)
+                target = 1.0 / (1.0 + np.exp(-z))  # sigmoide: z=0 (=baseline) -> 0.5
+            else:
+                target = 0.5  # todavia sin baseline confiable
+
+            # Suavizado (EMA) para no "escalonar" entre actualizaciones de 0.5s,
+            # igual que MovementTracker -- sino se oye como pasos discretos en Pd.
+            self.waves[name] = clamp(self.waves[name] + (target - self.waves[name]) * self.smoothing)
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +252,9 @@ class BpmTracker:
             return
         samples, _ = self.inlet.pull_chunk(timeout=0.0, max_samples=int(self.sfreq))
         for sample in samples:
-            self.buffer.append(sample[0])  # canal ppg1
+            # canal 1 = PPG2 (infrarrojo) -- el que sirve para pulso. PPG1 (indice 0)
+            # es luz ambiente, PPG3 (indice 2) es rojo; ver muselsl/constants.py.
+            self.buffer.append(sample[1] if len(sample) > 1 else sample[0])
 
         if now - self._last_update < self.update_interval_s:
             return
@@ -313,7 +404,7 @@ def main():
         acc_inlet = resolve_optional("ACC", args.stream_timeout, "movement quedara en 0 (agrega '--acc' a 'muselsl stream')")
     ppg_inlet = resolve_optional("PPG", args.stream_timeout, f"bpm quedara fijo en {args.baseline_bpm} (agrega '--ppg' a 'muselsl stream')")
 
-    bands = BandPowerTracker(eeg_inlet)
+    bands = BandPowerTracker(eeg_inlet, calibration_s=args.calibration)
     movement = MovementTracker(gyro_inlet or acc_inlet, scale=args.movement_scale)
     bpm = BpmTracker(ppg_inlet, baseline_bpm=args.baseline_bpm) if ppg_inlet else None
     phase = MomentPhase(
