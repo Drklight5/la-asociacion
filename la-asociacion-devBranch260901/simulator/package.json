@@ -1,0 +1,13 @@
+{
+  "name": "eeg-simulator",
+  "version": "1.0.0",
+  "description": "Simulador de datos EEG/BPM/movimiento (Muse 2) que envia por OSC/UDP a Pure Data",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "node-osc": "^11.7.0"
+  }
+}
