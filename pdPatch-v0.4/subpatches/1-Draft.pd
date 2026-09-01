@@ -283,7 +283,7 @@
 #X connect 0 0 5 0;
 #X restore 209 75 pd chart-colors;
 #X text 678 11 Banda Dominante;
-#X obj 271 775 cnv 19 300 200 empty cnv_label THETA 40 12 0 25 #000000 #ffffff 0;
+#X obj 271 775 cnv 19 300 200 empty cnv_label DELTA 40 12 0 25 #000000 #ffffff 0;
 #X msg 796 55 label \$1;
 #X obj 729 35 r domWav;
 #X obj 862 73 send cnv_label;
@@ -305,7 +305,7 @@
 #X text 1195 732 THETA;
 #X msg 494 59 \; pd dsp 1;
 #X obj 493 30 loadbang;
-#N canvas 0 34 1470 814 clock 0;
+#N canvas 0 34 1470 814 clock 1;
 #X obj 359 229 tgl 19 0 empty empty empty 0 -10 0 12 #fcfcfc #000000 #000000 0 1;
 #X obj 359 264 metro;
 #X obj 502 160 r heart_rate;
@@ -316,9 +316,13 @@
 #X obj 495 265 metro;
 #X obj 347 203 loadbang;
 #X obj 495 296 s arp_bng;
+#X obj 190 325 s rotate_cubes;
+#X obj 194 285 i;
+#X obj 253 285 + 1;
 #X connect 0 0 1 0;
 #X connect 0 0 7 0;
 #X connect 1 0 5 0;
+#X connect 1 0 11 0;
 #X connect 2 0 3 0;
 #X connect 3 0 4 0;
 #X connect 4 0 1 1;
@@ -326,6 +330,9 @@
 #X connect 6 0 7 1;
 #X connect 7 0 9 0;
 #X connect 8 0 0 0;
+#X connect 11 0 12 0;
+#X connect 11 0 10 0;
+#X connect 12 0 11 1;
 #X restore 326 75 pd clock;
 #X obj 105 51 focus-meter;
 #X connect 15 0 17 0;
