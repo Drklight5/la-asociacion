@@ -11,8 +11,10 @@ Requisito previo: un stream LSL de tipo EEG ya corriendo.
 
 Streams opcionales (si no estan disponibles, el productor sigue mandando el
 protocolo completo con valores de respaldo, para no romper el contrato con Pd):
-  - ACC/GYRO -> `movement` real (si no hay ninguno, movement queda en 0 y se
-    avisa una vez por consola).
+  - ACC/GYRO -> `movement` real (si no hay ninguno, movement queda fijo y se
+    avisa por consola). Cada puente los nombra distinto: muselsl publica 'ACC'
+    y 'GYRO', BlueMuse publica 'Accelerometer' y 'Gyroscope'. Se prueban los
+    dos nombres, asi anda igual en Mac que en Windows.
   - PPG      -> `bpm` real via deteccion de picos (si no hay, se manda
     --baseline-bpm fijo).
 
@@ -50,9 +52,27 @@ Robustez de adquisicion (todo interno, el protocolo OSC no cambia):
   - Calibracion: se ignoran los primeros `--calib-settle` s (electrodos secos
     asentandose) y al terminar se imprime un reporte de calidad -- si sale
     "DUDOSA", conviene reacomodar el Muse y escribir 'reset'.
+
+    LA PERSONA TIENE QUE ESTAR QUIETA MIENTRAS CALIBRA. No es prolijidad: es lo
+    que decide si las bandas salen al derecho o al reves. TP9/TP10 van sobre las
+    orejas y captan el micromovimiento como onda lenta de 1-2Hz, que cae dentro
+    de delta/theta. Medido sobre el equipo real:
+      calibrando en movimiento -> despues, al aquietarse:
+          delta/theta -0.167   beta/gamma +0.118   <- la inversion que se ve en Pd
+      calibrando quieta -> despues, al moverse:
+          delta/theta +0.285   beta/gamma -0.225   <- sin inversion
+    Un baseline tomado en movimiento queda inflado en delta/theta, y despues
+    cualquier momento de quietud las hace derrumbarse; el comun-modo convierte
+    esa caida en una subida falsa de beta/gamma. Calibrar quieta lo evita, sin
+    costar nada de rango ni de SNR.
   - Conexion: si el stream EEG se congela se avisa y se mantienen los ultimos
     valores; si sigue caido se reintenta resolver/reconectar solo. Se avisa si
     la tasa de muestreo real se aleja mucho de la nominal (BLE saturado).
+  - Datos invalidos: las muestras no finitas (NaN/inf, tipicas de una perdida de
+    paquetes BLE en BlueMuse) se descartan en la ingesta y se avisa por consola;
+    nunca llegan al buffer de analisis. La tasa estimada cuenta solo muestras
+    utiles, asi que un "tasa EEG real ~190Hz" junto a un aviso de no-finitos
+    significa que se estan perdiendo paquetes, no que el analisis este mal.
 
 MOVIMIENTO: con `--movement-auto` (default), la calibracion mide el reposo y
 fija `--movement-scale` y el umbral de patada solos -- ya no hay que ajustarlos
@@ -69,7 +89,7 @@ import time
 from collections import deque
 
 import numpy as np
-from pylsl import StreamInlet, resolve_byprop
+from pylsl import StreamInlet, resolve_byprop, resolve_streams
 from pythonosc import udp_client
 from scipy.signal import butter, filtfilt, find_peaks, welch
 
@@ -103,6 +123,11 @@ MOMENT = {
 
 
 def clamp(value, lo=0.0, hi=1.0):
+    # NaN nunca debe leerse como "el maximo": en Python min(hi, nan) devuelve hi,
+    # asi que un solo NaN clavaba las 5 bandas (y movement) en 1.0. Se trata como
+    # piso -- un dato invalido no puede parecer "actividad al tope".
+    if value != value:  # NaN
+        return lo
     return max(lo, min(hi, value))
 
 
@@ -144,10 +169,23 @@ EEG_RECONNECT_AFTER_S = 6.0  # congelado tanto tiempo -> reintentar resolve + St
 RATE_CHECK_S = 10.0          # cada cuanto se estima la tasa real de muestreo
 RATE_TOLERANCE = 0.25        # se avisa si la tasa real se aleja > esto de la nominal
 
-# --- salud de canales EEG (en uV; BlueMuse y muselsl entregan uV) ---
+# --- banda de analisis -----------------------------------------------------
+# TODA amplitud (salud de canales y gating de artefactos) se mide sobre la señal
+# ya filtrada en esta banda, nunca sobre la cruda. En crudo, el offset de DC y la
+# deriva lenta del Muse son la mayor parte del pico-a-pico -- medido sobre el
+# equipo real: offset de hasta 940uV y pico-a-pico crudo de 1800uV con la señal
+# util en ~300uV -- asi que un umbral absoluto en crudo o no dispara nunca o
+# rechaza todo. Filtrar tambien mejora el espectro: sin el DC, delta deja de
+# recibir la fuga de la deriva.
+ANALYSIS_BAND = (0.5, 45.0)
+
+# --- salud de canales EEG (sobre señal FILTRADA, en uV) ---
 CHAN_FLATLINE_STD = 0.5      # std por debajo -> canal muerto / desconectado
-CHAN_INSANE_STD = 250.0      # std sostenida por encima -> no es EEG (EMG / mal contacto)
-CHAN_RAIL_PTP = 1500.0       # pico-a-pico por encima -> saturacion del ADC
+CHAN_INSANE_STD = 100.0      # std sostenida por encima -> no es EEG (EMG / mal contacto).
+                             # Medido: una sesion con buen contacto da 6.7-27uV
+                             # filtrados; un electrodo suelto dio 86uV.
+CHAN_RAIL_PTP = 1000.0       # pico-a-pico filtrado sostenido por encima -> inservible
+                             # (el electrodo suelto medido daba 1313uV)
 CHAN_DROP_STREAK = 12        # ventanas malas seguidas (~3s @0.25s) -> sacar el canal del promedio
 CHAN_RESTORE_STREAK = 20     # ventanas buenas seguidas (~5s) -> reincorporarlo
 
@@ -181,9 +219,36 @@ BASELINE_SAMPLE_GAP_S = 2.0    # separacion entre muestras del baseline (= largo
                               # ventanas solapadas subestiman el desvio por autocorrelacion
 STD_FLOOR_BELS = 0.06         # piso del desvio (~15% de potencia). Una calibracion corta y
                               # quieta da un desvio minusculo y el mapeo se satura enseguida.
+COMMON_MODE_WEIGHT = 1.0      # cuanto del comun-modo se resta -- lo pisa --common-mode.
+                              # 1.0 = como venia (transformada CLR completa); 0.0 = cada banda
+                              # contra su propio baseline y nada mas. Medido sobre el equipo
+                              # real (30s ojos abiertos vs 30s cerrados, buen contacto):
+                              #   peso  anticorr   SNR alfa  SNR prom
+                              #   0.00    +0.001        3.4       2.8
+                              #   0.25    -0.137        6.2       4.1
+                              #   0.50    -0.201       10.7       5.7
+                              #   1.00    -0.212       13.3       6.9
+                              # No hay punto dulce intermedio: la anticorrelacion ya esta casi
+                              # al maximo en 0.5 mientras el SNR sigue subiendo hasta 1.0. Es
+                              # una eleccion entre 5 bandas vivas pero acopladas (1.0) y bandas
+                              # honestas donde beta/gamma casi no se mueven (0.0).
+ARTIFACT_MAX_STREAK = 20      # ventanas rechazadas SEGUIDAS (~5s @0.25s) antes de abrir la
+                              # valvula: se deja pasar la ventana igual y se avisa. Un gate que
+                              # puede rechazar el 100% indefinidamente congela la salida sin
+                              # decir nada, y eso es peor que analizar una ventana sucia --
+                              # sobre todo en vivo, donde nadie esta mirando la consola.
 Z_SPREAD = 3.0               # cuantos sigmas ocupan ~medio rango del tanh. Mas alto = mas suave.
-ARTIFACT_PTP_RATIO = 4.0      # se descarta la ventana si su pico-a-pico supera esto x el de
-                              # calibracion (parpadeo / mordida / sacudida de cabeza)
+ARTIFACT_PTP_UV = 150.0       # pico-a-pico FILTRADO por encima de esto -> ventana sucia,
+                              # se descarta. Umbral ABSOLUTO, no relativo a la calibracion:
+                              # el relativo terminaba dependiendo de si la persona se movia
+                              # o no mientras calibraba. Verificado sobre datos reales del
+                              # equipo: TP9/TP10 van sobre las orejas y captan el
+                              # micromovimiento como onda lenta de 1-2Hz, lo que inflaba
+                              # delta/theta ~5x mientras la persona estaba activa. Con el
+                              # baseline tomado en ese estado, quedarse quieta hacia
+                              # DERRUMBAR delta/theta y (via el comun-modo) SUBIR beta/gamma
+                              # -- justo la inversion que se veia en Pd. Con este gate los
+                              # cinco signos quedan fisiologicamente correctos.
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +287,12 @@ class BandPowerTracker:
         self._new_samples = False
         self._rx_count = 0
         self._rx_window_start = 0.0
+        self._nonfinite_total = 0
+        self._nonfinite_warn_t = 0.0
+        self._reject_streak = 0
+        self._valve_open = False
+        self._health_fallback = False
+        self._rate_warned = False
         self.waves = {name: 0.5 for name in BANDS}
         self._reset_baseline()
 
@@ -229,6 +300,9 @@ class BandPowerTracker:
         info = self.inlet.info()
         self.sfreq = info.nominal_srate() or 256.0
         self.buf_len = max(int(self.window_s * self.sfreq), 64)
+        ny = self.sfreq / 2.0
+        lo, hi = ANALYSIS_BAND
+        self._filtro = butter(4, [lo / ny, min(hi, ny * 0.95) / ny], btype="band")
         self.all_names = read_channel_names(info)
         self.candidate_idx = select_eeg_channels(self.all_names)  # sin AUX
         self.candidate_names = [self.all_names[i] for i in self.candidate_idx]
@@ -262,7 +336,6 @@ class BandPowerTracker:
         self._was_calibrating = False
         self._last_baseline_sample = 0.0
         self._baseline = {name: _RunningStats() for name in BANDS}
-        self._ptp_ref = _RunningStats()   # pico-a-pico tipico en calibracion (para el gating)
         # bootstrap: juntar el baseline sobre la marcha en 'operando'. Arranca en
         # True para cubrir --skip-calibration (nunca hay fase 'calibrando'); se
         # apaga en cuanto empieza una calibracion de verdad.
@@ -297,12 +370,32 @@ class BandPowerTracker:
         for pos in range(self.n_channels):
             active = pos in self._active_pos
             if active and self._bad_streak[pos] >= CHAN_DROP_STREAK:
-                print(f"[canal] {self.candidate_names[pos]} sin señal usable -- fuera del promedio")
+                if not self._health_fallback:  # en fallback el canal se reingresa cada
+                    # ventana y volveria a caer: avisar una vez, no en cada vuelta
+                    print(f"[canal] {self.candidate_names[pos]} sin señal usable -- fuera del promedio")
             elif not active and self._good_streak[pos] >= CHAN_RESTORE_STREAK:
                 print(f"[canal] {self.candidate_names[pos]} recuperado -- vuelve al promedio")
                 new_active.append(pos)
             elif active:
                 new_active.append(pos)
+        if not new_active:
+            # Ningun canal pasa el chequeo. Quedarse sin canales congela la salida,
+            # asi que se conserva el menos malo (el de menor desvio) y se avisa UNA vez.
+            # Se mantiene el mismo canal mientras dure el fallback, para no ir saltando
+            # de electrodo en electrodo y correr el nivel de las bandas en cada ventana.
+            if self._health_fallback and self._active_pos:
+                new_active = list(self._active_pos)
+            else:
+                mejor = min(range(self.n_channels), key=lambda i: float(window[:, i].std()))
+                new_active = [mejor]
+                self._health_fallback = True
+                print(f"[canal] ningun electrodo pasa el chequeo -- se sigue con "
+                      f"{self.candidate_names[mejor]} (el menos malo) para no congelar la "
+                      f"salida. REACOMODA EL MUSE y escribi 'reset'.")
+        elif self._health_fallback:
+            self._health_fallback = False
+            print(f"[canal] electrodos recuperados -- se vuelve a "
+                  f"{[self.candidate_names[i] for i in new_active]}")
         self._active_pos = new_active
 
     # -- reporte de calidad de calibracion ---------------------------------
@@ -333,11 +426,34 @@ class BandPowerTracker:
         samples, _ = self.inlet.pull_chunk(timeout=0.0, max_samples=int(self.sfreq * 2))
         if samples:
             arr = np.asarray(samples, dtype=float)
-            for buf_i, ch_i in enumerate(self.candidate_idx):
-                self.buffers[buf_i].extend(arr[:, ch_i])
-            self.last_sample_t = now
-            self._new_samples = True
-            self._rx_count += len(samples)
+            # Filtro de no-finitos EN LA ENTRADA. BlueMuse emite NaN cuando pierde
+            # paquetes BLE; un solo NaN envenenaba el Welch de la ventana entera y
+            # de las siguientes mientras siguiera en el buffer. Peor: el gate de
+            # artefactos no lo frenaba (nan > x da False) y clamp(nan) devolvia
+            # 1.0, o sea las 5 bandas clavadas al tope. Se descarta antes de que
+            # entre al buffer.
+            finite = np.isfinite(arr[:, self.candidate_idx]).all(axis=1)
+            n_bad = int((~finite).sum())
+            if n_bad:
+                arr = arr[finite]
+                self._nonfinite_total += n_bad
+            # OJO: filas no finitas NO significa "paquetes perdidos". BlueMuse
+            # publica sus streams sobre una misma grilla temporal y rellena con
+            # NaN las filas que le corresponden a otro stream, en bloques de 12
+            # (el tamaño de paquete del Muse): se ve como
+            # "............FFFFFFFFFFFF............". Descartarlas devuelve
+            # exactamente la tasa nominal, asi que es funcionamiento normal y no
+            # hay nada que avisar. La perdida REAL de datos ya la detecta el
+            # chequeo de tasa de mas abajo, que cuenta solo muestras utiles.
+            if arr.shape[0]:
+                for buf_i, ch_i in enumerate(self.candidate_idx):
+                    self.buffers[buf_i].extend(arr[:, ch_i])
+                # Solo las muestras utiles cuentan como "stream vivo" y para la tasa:
+                # un stream que manda puro NaN debe escalar a stalled -> reconexion,
+                # no quedarse fingiendo que llegan datos.
+                self.last_sample_t = now
+                self._new_samples = True
+                self._rx_count += arr.shape[0]
 
         # --- stall / reconexion la maneja el loop principal mirando .stalled ---
         if self.last_sample_t is None:
@@ -359,9 +475,15 @@ class BandPowerTracker:
             self._rx_window_start = now
         elif now - self._rx_window_start >= RATE_CHECK_S:
             self.sample_rate_est = self._rx_count / (now - self._rx_window_start)
-            if abs(self.sample_rate_est - self.sfreq) > RATE_TOLERANCE * self.sfreq:
-                print(f"[conexion] tasa EEG real ~{self.sample_rate_est:.0f}Hz vs nominal "
-                      f"{self.sfreq:.0f}Hz (BLE saturado?)")
+            fuera = abs(self.sample_rate_est - self.sfreq) > RATE_TOLERANCE * self.sfreq
+            # solo en las transiciones: repetirlo cada 10s tapa la consola y hace
+            # perder de vista los avisos que si piden accion
+            if fuera and not self._rate_warned:
+                print(f"[conexion] tasa EEG util ~{self.sample_rate_est:.0f}Hz vs nominal "
+                      f"{self.sfreq:.0f}Hz -- se estan perdiendo datos (BLE saturado?)")
+            elif not fuera and self._rate_warned:
+                print(f"[conexion] tasa EEG normalizada (~{self.sample_rate_est:.0f}Hz)")
+            self._rate_warned = fuera
             self._rx_count = 0
             self._rx_window_start = now
 
@@ -385,7 +507,13 @@ class BandPowerTracker:
         if frozen:
             return  # movimiento_abrupto: waves congeladas tal cual
 
-        window = np.array(self.buffers, dtype=float).T  # (buf_len, n_channels)
+        crudo = np.array(self.buffers, dtype=float).T  # (buf_len, n_channels)
+        if not np.all(np.isfinite(crudo)):
+            return  # red de seguridad; el filtro de la ingesta ya deberia evitarlo
+        # Desde aca TODO trabaja sobre la señal filtrada: salud de canales, gating
+        # y espectro. Medir amplitudes en crudo no significa nada (ver ANALYSIS_BAND).
+        b_f, a_f = self._filtro
+        window = filtfilt(b_f, a_f, crudo, axis=0)
         self._update_channel_health(window)
         if not self._active_pos:
             return  # ningun canal sano -> mantener ultimos valores
@@ -397,15 +525,32 @@ class BandPowerTracker:
         if calibrating and settled:
             self._calib_windows += 1
 
-        # --- gating de artefactos (parpadeo / mordida / sacudida) ---
+        # --- gating de artefactos: umbral ABSOLUTO sobre la señal filtrada ---
+        # Se descarta la ventana entera a proposito. Se probo rechazar por canal
+        # (dejando participar solo a los limpios) y sale peor: el conjunto de
+        # canales cambia de ventana en ventana y ese vaiven de composicion mete
+        # mas ruido del que saca -- medido sobre datos reales, SNR 1.4 contra 6.1.
         ptp = float(np.ptp(w, axis=0).max())
-        ptp_known = self._ptp_ref.n >= BASELINE_MIN_SAMPLES
-        if ptp_known and ptp > ARTIFACT_PTP_RATIO * self._ptp_ref.mean:
+        if ptp > ARTIFACT_PTP_UV:
             if calibrating and settled:
                 self._calib_rejected += 1
-            return  # ventana sucia
-        if collecting:
-            self._ptp_ref.update(ptp)
+            self._reject_streak += 1
+            if self._reject_streak < ARTIFACT_MAX_STREAK:
+                return  # ventana sucia (movimiento / parpadeo / mordida)
+            # Valvula de escape: si TODO viene sucio, el problema no es una
+            # ventana puntual sino el contacto. Congelarse en silencio seria lo
+            # peor que se puede hacer en vivo, asi que se deja pasar y se avisa.
+            if not self._valve_open:
+                self._valve_open = True
+                print(f"[artefacto] señal sucia sostenida (pico-a-pico {ptp:.0f}uV vs umbral "
+                      f"{ARTIFACT_PTP_UV:.0f}uV) -- se deja de filtrar para no congelar la salida.")
+                print( "[artefacto] REACOMODA EL MUSE (pelo, presion, piel limpia) y escribi 'reset'. "
+                       "Mientras tanto los valores son poco confiables.")
+        else:
+            if self._valve_open:
+                print("[artefacto] señal limpia de nuevo -- filtrado reactivado")
+                self._valve_open = False
+            self._reject_streak = 0
 
         # fs = la nominal del stream (cada muestra representa 1/sfreq s, aunque el
         # BLE pierda paquetes). sample_rate_est es solo diagnostico.
@@ -419,8 +564,18 @@ class BandPowerTracker:
                 band_power = float(psd[np.argmin(np.abs(freqs - 0.5 * (lo + hi)))].mean())
             log_power[name] = np.log10(max(band_power, 1e-12))
 
+        # Cada banda va contra SU PROPIO baseline, sin restar el comun-modo.
+        # El z-score por banda ya se lleva el offset 1/f: comparar delta contra el
+        # delta en reposo de esta persona no necesita saber cuanta potencia tiene
+        # gamma. Restar la media de las 5 (transformada CLR) forzaba que sumaran 0,
+        # y eso las anticorrelacionaba por construccion: medido sobre el equipo
+        # real, correlacion cruzada media de -0.212 (el piso teorico del CLR es
+        # -0.25). En la practica delta/theta caian por artefacto de movimiento y
+        # eso EMPUJABA beta/gamma hacia arriba sin que hubiera cambiado nada en
+        # ellas -- la inversion que se veia en Pd. Sin comun-modo la correlacion
+        # baja a -0.05: las 5 bandas se mueven por lo suyo.
         common = sum(log_power.values()) / len(log_power)
-        shape = {name: log_power[name] - common for name in BANDS}
+        shape = {name: log_power[name] - COMMON_MODE_WEIGHT * common for name in BANDS}
 
         if take_sample:
             for name in BANDS:
@@ -470,6 +625,8 @@ class MovementTracker:
         samples, _ = self.inlet.pull_chunk(timeout=0.0, max_samples=64)
         for sample in samples:
             vec = np.asarray(sample, dtype=float)
+            if not np.all(np.isfinite(vec)):
+                continue  # paquete perdido: no contamina el bias ni dispara patadas falsas
             if self._bias is None:
                 self._bias = vec.copy()
             else:
@@ -625,12 +782,33 @@ def start_stdin_reader():
     return q
 
 
-def resolve_optional(stream_type, timeout, label):
-    streams = resolve_byprop("type", stream_type, timeout=timeout)
-    if not streams:
-        print(f"[aviso] no se encontro stream LSL '{stream_type}' -- {label}")
-        return None
-    return StreamInlet(streams[0], max_buflen=EEG_MAX_BUFLEN)
+def resolve_optional(stream_types, timeout, label):
+    """`stream_types` son nombres ALTERNATIVOS del mismo stream, y se prueban en
+    orden. Hace falta porque cada puente LSL bautiza los tipos distinto:
+    muselsl (Mac) publica 'ACC' y 'GYRO', BlueMuse (Windows) publica exactamente
+    los mismos streams como 'Accelerometer' y 'Gyroscope'. Buscando solo los
+    nombres de muselsl, en Windows nunca se encontraba el movimiento: `movement`
+    se quedaba fijo, la patada automatica no disparaba nunca y --movement-auto
+    no llegaba a calibrar. El timeout se reparte entre los candidatos para que
+    el arranque no tarde el doble cuando el stream de verdad no esta."""
+    if isinstance(stream_types, str):
+        stream_types = (stream_types,)
+    por_intento = max(timeout / len(stream_types), 0.5)
+    for stream_type in stream_types:
+        streams = resolve_byprop("type", stream_type, timeout=por_intento)
+        if streams:
+            return StreamInlet(streams[0], max_buflen=EEG_MAX_BUFLEN)
+    # Respaldo: enumerar TODO y comparar tipos a mano. Se vio a resolve_byprop
+    # fallar transitoriamente en el primer llamado del proceso (resolver de LSL
+    # todavia levantando) con el stream disponible; ese tropiezo dejaba el
+    # movimiento muerto toda la funcion.
+    buscados = {t.lower() for t in stream_types}
+    for info in resolve_streams(wait_time=max(timeout, 2.0)):
+        if info.type().lower() in buscados:
+            print(f"[aviso] '{info.type()}' aparecio recien en la segunda busqueda")
+            return StreamInlet(info, max_buflen=EEG_MAX_BUFLEN)
+    print(f"[aviso] no se encontro stream LSL {'/'.join(stream_types)} -- {label}")
+    return None
 
 
 def resolve_eeg_inlet(timeout=2.0):
@@ -662,6 +840,8 @@ def main():
     parser.add_argument("--calibration", type=float, default=float(env.get("EEG_PRODUCER_CALIBRATION", "60")), help="Duracion de calibracion en segundos")
     parser.add_argument("--baseline-bpm", type=float, default=float(env.get("EEG_PRODUCER_BASELINE_BPM", "72")), help="bpm de respaldo si no hay stream PPG")
     parser.add_argument("--skip-calibration", action="store_true", default=_env_bool("EEG_PRODUCER_SKIP_CALIBRATION"), help="Arranca directo en 'operando'")
+    parser.add_argument("--common-mode", type=float, default=float(env.get("EEG_PRODUCER_COMMON_MODE", "1.0")), help="cuanto del comun-modo se resta a las bandas: 1.0 = como viene (bandas mas vivas pero acopladas entre si), 0.0 = bandas independientes (beta/gamma casi no se mueven). Ver la tabla en COMMON_MODE_WEIGHT")
+    parser.add_argument("--artifact-uv", type=float, default=float(env.get("EEG_PRODUCER_ARTIFACT_UV", "150")), help="pico-a-pico filtrado (uV) por encima del cual se descarta la ventana. 0 = sin rechazo (como venia). Mas bajo = mas limpio pero mas ventanas perdidas")
     parser.add_argument("--calib-settle", type=float, default=float(env.get("EEG_PRODUCER_CALIB_SETTLE", "10")), help="segundos iniciales de la calibracion que se ignoran (electrodos secos asentandose)")
     parser.add_argument("--movement-auto", action=argparse.BooleanOptionalAction, default=_env_bool("EEG_PRODUCER_MOVEMENT_AUTO", True), help="mide el reposo en la calibracion y fija --movement-scale / umbral de patada solo")
     parser.add_argument("--movement-scale", type=float, default=float(env.get("EEG_PRODUCER_MOVEMENT_SCALE", "50")), help="Magnitud de gyro/accel que equivale a movement=1.0 (fallback si --no-movement-auto)")
@@ -670,6 +850,16 @@ def main():
     parser.add_argument("--stream-timeout", type=float, default=float(env.get("EEG_PRODUCER_STREAM_TIMEOUT", "5")), help="segundos a esperar por cada stream LSL opcional (ACC/GYRO/PPG)")
     parser.add_argument("--debug", action="store_true", default=_env_bool("EEG_PRODUCER_DEBUG"), help="imprime movement/bpm en cada actualizacion, para calibrar --movement-scale")
     args = parser.parse_args()
+
+    global COMMON_MODE_WEIGHT, ARTIFACT_PTP_UV
+    COMMON_MODE_WEIGHT = clamp(args.common_mode, 0.0, 1.0)
+    # 0 = sin rechazo: se usa infinito para que la comparacion nunca dispare
+    ARTIFACT_PTP_UV = args.artifact_uv if args.artifact_uv > 0 else float("inf")
+    if args.artifact_uv <= 0:
+        print("[bandas] rechazo de artefactos DESACTIVADO (--artifact-uv 0)")
+    if COMMON_MODE_WEIGHT != 1.0:
+        print(f"[bandas] comun-modo al {COMMON_MODE_WEIGHT:.2f} "
+              f"({'bandas independientes' if COMMON_MODE_WEIGHT == 0 else 'parcial'})")
 
     client = udp_client.SimpleUDPClient(args.host, args.port)
     print(f"Mandando datos EEG reales a {args.host}:{args.port} (OSC/UDP) a {args.rate}Hz")
@@ -689,11 +879,14 @@ def main():
         )
     print(f"EEG conectado: {eeg_inlet.info().name()}")
 
-    gyro_inlet = resolve_optional("GYRO", args.stream_timeout, "movement quedara en 0 (agrega '--gyro' a 'muselsl stream')")
+    gyro_inlet = resolve_optional(("GYRO", "Gyroscope"), args.stream_timeout, "movement quedara fijo (en BlueMuse activa el Gyroscope; en muselsl agrega '--gyro')")
     acc_inlet = None
     if gyro_inlet is None:
-        acc_inlet = resolve_optional("ACC", args.stream_timeout, "movement quedara en 0 (agrega '--acc' a 'muselsl stream')")
-    ppg_inlet = resolve_optional("PPG", args.stream_timeout, f"bpm quedara fijo en {args.baseline_bpm} (agrega '--ppg' a 'muselsl stream')")
+        acc_inlet = resolve_optional(("ACC", "Accelerometer"), args.stream_timeout, "movement quedara fijo (en BlueMuse activa el Accelerometer; en muselsl agrega '--acc')")
+    ppg_inlet = resolve_optional(("PPG",), args.stream_timeout, f"bpm quedara fijo en {args.baseline_bpm} (en muselsl agrega '--ppg')")
+    if gyro_inlet is None and acc_inlet is None:
+        print("[aviso] sin GYRO ni ACC: 'movement' queda en su valor inicial y la "
+              "patada automatica NO va a dispararse (solo el comando 'kick').")
 
     bands = BandPowerTracker(eeg_inlet, calib_settle_s=args.calib_settle)
     movement = MovementTracker(gyro_inlet or acc_inlet, scale=args.movement_scale, auto=args.movement_auto)
@@ -800,7 +993,8 @@ def main():
                 chans = [bands.candidate_names[p] for p in bands._active_pos]
                 print(f"movement={movement.value:.3f}/inst={movement.instant:.3f} "
                       f"(mag={movement._last_magnitude:.1f}) bpm={(bpm.bpm if bpm else args.baseline_bpm):.0f} "
-                      f"eeg={health} canales={chans} tasa={bands.sample_rate_est:.0f}Hz")
+                      f"eeg={health} canales={chans} tasa={bands.sample_rate_est:.0f}Hz "
+                      f"gate={'ABIERTO' if bands._valve_open else 'ok'}")
     except KeyboardInterrupt:
         print("\nProductor detenido.")
 
