@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Los .bat corren en Windows: necesitan CRLF.
+*.bat text eol=crlf
+
+# Estos los lee bash en macOS/Linux: deben quedar en LF si o si.
+*.command text eol=lf
+*.sh text eol=lf
+deploy/config.txt text eol=lf
