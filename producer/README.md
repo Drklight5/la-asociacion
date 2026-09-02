@@ -53,23 +53,37 @@ python muse_producer.py --host 127.0.0.1 --port 9000
 
 Mismos comandos que el simulador mientras corre (`kick`, `skip`, `reset`, `quit` + Enter).
 
-### Calibrar `movement` con el dispositivo real
+### Flujo por persona (obra)
 
-`--movement-scale` y `--kick-threshold` no se pueden adivinar sin probar con
-el Muse puesto — dependen de la sensibilidad real del gyro y de qué tan fuerte
-se sacude la cabeza al patear. Pasos:
+1. La persona se pone el Muse. El operador escribe `reset` + Enter.
+2. Arranca la calibración (`--calibration`, default 60 s). Se ignoran los
+   primeros `--calib-settle` s (default 10) mientras los electrodos secos se
+   asientan. La persona escucha la explicación.
+3. Al terminar, la consola imprime un reporte: `baseline OK: ...` o
+   `!!! CALIDAD DUDOSA ...`. Si sale dudosa → reacomodar el Muse y `reset`.
+4. `moment` pasa a `operando`. La persona patea → `movimiento_abrupto` (las
+   waves se congelan durante el artefacto) → vuelve a `operando`.
+5. La persona se saca el Muse, lo deja en la mesa. Siguiente persona → paso 1.
 
-1. Correr con `--debug` y el Muse puesto: `python muse_producer.py --debug`.
-2. Ver el valor de `movement` en reposo (parado, quieto) — debería rondar 0.05–0.15.
-3. Simular la patada (sacudir la cabeza fuerte, o patear de verdad) y ver a
-   qué valor de `movement` llega.
-4. Ajustar `--movement-scale` hasta que el reposo dé ~0.1 y el movimiento
-   fuerte se acerque a 1.0. Si el kick automático no dispara o dispara con
-   cualquier movimiento, ajustar `--kick-threshold` (default 0.6).
+### Movimiento / detección de patada
 
-Si no hay stream GYRO/ACC (no se pasó `--gyro`/`--acc` a `muselsl stream`, o
-BlueMuse no los tiene habilitados), `movement` queda fijo en un valor bajo y
-la patada solo se dispara con el comando manual `kick`.
+Con `--movement-auto` (default) la calibración **mide sola** el reposo del
+giro/acelerómetro y fija la escala y el umbral de patada — no hay que ajustar
+nada a mano. Verlo con `--debug` (`movement=... / inst=...`).
+
+Con `--no-movement-auto` se usan `--movement-scale` y `--kick-threshold` tal
+cual (para forzar valores conocidos). Sin stream GYRO/ACC (no se pasó
+`--gyro`/`--acc`, o BlueMuse no los tiene habilitados), `movement` queda bajo
+y fijo y la patada solo se dispara con el comando manual `kick`.
+
+### Robustez de conexión
+
+- Descarta el canal `Right AUX` del Muse 2 y cualquier electrodo que quede
+  plano / sature / haga mal contacto (y lo reincorpora si se recupera). Si
+  TP9/TP10 fallan, sigue con AF7/AF8.
+- Si el stream EEG se corta, avisa y **mantiene los últimos valores**; si
+  sigue caído, reintenta reconectar solo.
+- Avisa si la tasa de muestreo real se aleja mucho de la nominal (BLE saturado).
 
 ## Sin pasar flags (`.env`)
 
