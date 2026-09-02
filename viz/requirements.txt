@@ -1,0 +1,4 @@
+# Puente OSC -> WebSocket para la visual de proyeccion.
+# python-osc ya lo usa el productor; websockets es lo unico nuevo.
+python-osc>=1.9
+websockets>=12

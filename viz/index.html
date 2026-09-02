@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>La Asociación — visual EEG</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #05050a; overflow: hidden; }
+  body { cursor: none; }
+  canvas { display: block; }
+  #err {
+    position: fixed; inset: 0; display: none; place-items: center;
+    background: #05050a; color: #d98c8c; z-index: 50;
+    font: 14px/1.7 ui-monospace, Menlo, Consolas, monospace; text-align: center; padding: 2rem;
+  }
+  #err code { color: #e8e8ea; background: #16161c; padding: .15em .4em; border-radius: 4px; }
+  #hint {
+    position: fixed; left: 14px; bottom: 12px; z-index: 10;
+    font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace; color: #4a4a5a; user-select: none;
+  }
+</style>
+</head>
+<body>
+<div id="hint">d demo · l etiquetas · f pantalla completa · - + escala del historial</div>
+<div id="err">
+  No se encontró <b>p5.min.js</b> en esta carpeta.<br><br>
+  Descárgalo una vez dentro de <code>viz/</code>:<br><br>
+  <code>curl -L https://cdn.jsdelivr.net/npm/p5@1.9.4/lib/p5.min.js -o p5.min.js</code>
+</div>
+
+<script
+  src="p5.min.js"
+  onerror="document.getElementById('err').style.display='grid'"></script>
+<script src="sketch.js"></script>
+</body>
+</html>

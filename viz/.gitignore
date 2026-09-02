@@ -1,0 +1,6 @@
+# sesiones grabadas por  bridge.py --record
+*.jsonl
+
+# entornos de python locales
+.venv/
+__pycache__/
