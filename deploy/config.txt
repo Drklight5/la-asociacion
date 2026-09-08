@@ -1,0 +1,27 @@
+# Configuracion del arranque en 1 clic (Windows y macOS).
+# Editar solo lo de la derecha del "=". Sin espacios ni comillas.
+
+# --- Muse (solo macOS) -------------------------------------------------------
+# Nombre del Muse. Dejar vacio si hay un solo Muse encendido cerca.
+# Para verlo:  .venv/bin/muselsl list
+MUSE_NAME=
+
+# Flags del puente Bluetooth de macOS (muselsl). --acc --gyro --ppg habilitan
+# movimiento y ritmo cardiaco reales. Quitar alguno si tu Muse no lo soporta.
+MUSE_STREAM_ARGS=--acc --gyro --ppg
+
+# --- Productor -------------------------------------------------------------
+# Argumentos extra para producer/muse_producer.py (opcional).
+# Ej:  --calibration 45   |   --skip-calibration   |   --debug
+PRODUCER_ARGS=
+
+# --- Grafica -------------------------------------------------------------
+# Abrir el navegador con la grafica automaticamente:  si  /  no
+ABRIR_NAVEGADOR=si
+
+# --- Puertos (rara vez hace falta tocarlos) --------------------------------
+# El productor manda al bridge (BRIDGE_PORT); el bridge reenvia a Pure Data
+# en PD_PORT sin tocar nada del patch. WEB_PORT sirve la grafica.
+BRIDGE_PORT=9001
+PD_PORT=9000
+WEB_PORT=8000

@@ -58,7 +58,10 @@ Mismos comandos que el simulador mientras corre (`kick`, `skip`, `reset`, `quit`
 1. La persona se pone el Muse. El operador escribe `reset` + Enter.
 2. Arranca la calibración (`--calibration`, default 60 s). Se ignoran los
    primeros `--calib-settle` s (default 10) mientras los electrodos secos se
-   asientan. La persona escucha la explicación.
+   asientan. La persona escucha la explicación **quieta** — esto importa: si se
+   mueve mientras calibra, el baseline queda inflado en delta/theta y después
+   todo se ve invertido (delta/theta abajo, beta/gamma arriba). Medido: calibrar
+   quieta elimina la inversión sin costar rango.
 3. Al terminar, la consola imprime un reporte: `baseline OK: ...` o
    `!!! CALIDAD DUDOSA ...`. Si sale dudosa → reacomodar el Muse y `reset`.
 4. `moment` pasa a `operando`. La persona patea → `movimiento_abrupto` (las
