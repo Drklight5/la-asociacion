@@ -4,6 +4,8 @@
 //   bpm:   ritmo cardiaco (bpm)
 //   movement: 0..1
 //   moment: "calibrando" | "operando" | "movimiento_abrupto"
+//   gyro:  { x, y, z }  -> grados/s crudos, como el stream GYRO del Muse
+//   accel: { x, y, z }  -> g crudos, como el stream ACC del Muse (un eje ~1 = gravedad)
 
 const BANDS = ["delta", "theta", "beta", "alfa", "gamma"];
 
@@ -34,6 +36,50 @@ function randNormal() {
   const u = 1 - Math.random();
   const v = Math.random();
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+// ---------------------------------------------------------------------------
+// Ejes CRUDOS de giroscopio y acelerometro (x/y/z cada uno), en el mismo rango
+// que da un Muse real -- para viz/ (los cubos 3D) y para que el equipo de Pd
+// los mapee a la musica. NO forma parte del contrato historico con Pd (que solo
+// tiene la magnitud agregada en `movement`); son direcciones aditivas, ver
+// oscSender.js. Cada eje oscila a su propio ritmo (fase distinta) y su amplitud
+// sigue la energia de movimiento, asi que en calibracion casi no se mueven y en
+// la patada los 3 ejes se disparan juntos, como una sacudida real.
+// ---------------------------------------------------------------------------
+class GyroAxis {
+  // grados/segundo. Reposo ~0 (+- unos pocos de ruido), giro de cabeza
+  // +-50..150, patada hasta ~+-260.
+  constructor(freq, phase) {
+    this.freq = freq;
+    this.phase = phase;
+    this.value = 0;
+  }
+
+  step(dt, t, energy) {
+    const wobble = Math.sin(t * this.freq + this.phase) * 0.5 + randNormal() * 0.5;
+    const target = wobble * (4 + energy * 260);
+    this.value += (target - this.value) * clamp(dt * 6, 0, 1);
+    return Number(this.value.toFixed(2));
+  }
+}
+
+class AccelAxis {
+  // g (1g ~ 9.81 m/s2). Un eje lleva la gravedad (~+-1), los otros ~0; encima
+  // va la dinamica del movimiento. En la patada el eje puede irse a +-3.
+  constructor(freq, phase, gravity) {
+    this.freq = freq;
+    this.phase = phase;
+    this.gravity = gravity;
+    this.value = gravity;
+  }
+
+  step(dt, t, energy) {
+    const wobble = Math.sin(t * this.freq + this.phase) * 0.4 + randNormal() * 0.35;
+    const target = this.gravity + wobble * (0.04 + energy * 2.2);
+    this.value += (target - this.value) * clamp(dt * 6, 0, 1);
+    return Number(this.value.toFixed(3));
+  }
 }
 
 class Band {
@@ -73,6 +119,19 @@ export class EEGSimulator {
     this.bpmTarget = baselinebpm;
     this.movement = 0.05;
     this.movementTarget = 0.05;
+
+    this.gyro = {
+      x: new GyroAxis(0.7, 0),
+      y: new GyroAxis(0.5, 2.1),
+      z: new GyroAxis(0.9, 4.4),
+    };
+    // gravedad repartida como si el Muse estuviera puesto derecho: casi todo
+    // en un eje, un resto chico en los otros.
+    this.accel = {
+      x: new AccelAxis(0.6, 1.3, 0.06),
+      y: new AccelAxis(0.8, 3.7, -0.12),
+      z: new AccelAxis(0.4, 5.5, 0.98),
+    };
 
     this.elapsed = 0; // segundos desde que arranco la fase actual
     this.totalElapsed = 0;
@@ -117,6 +176,8 @@ export class EEGSimulator {
       band.value = band.profile.baseline;
       band.target = band.profile.baseline;
     }
+    for (const axis of Object.values(this.gyro)) axis.value = 0;
+    for (const axis of Object.values(this.accel)) axis.value = axis.gravity;
     this._enterPhase(MOMENT.CALIBRANDO);
   }
 
@@ -161,6 +222,21 @@ export class EEGSimulator {
     this.movement += (this.movementTarget - this.movement) * clamp(dt * 3, 0, 1);
     this.movement = clamp(this.movement);
 
+    // Ejes crudos de giro y acelerometro: misma energia que empuja `movement`,
+    // mas el pico de la patada, para que los 3 ejes se disparen juntos en
+    // movimiento_abrupto.
+    const motionEnergy = clamp(this.movement * 0.6 + this.kickEnergy * 0.6);
+    const gyro = {
+      x: this.gyro.x.step(dt, this.totalElapsed, motionEnergy),
+      y: this.gyro.y.step(dt, this.totalElapsed, motionEnergy),
+      z: this.gyro.z.step(dt, this.totalElapsed, motionEnergy),
+    };
+    const accel = {
+      x: this.accel.x.step(dt, this.totalElapsed, motionEnergy),
+      y: this.accel.y.step(dt, this.totalElapsed, motionEnergy),
+      z: this.accel.z.step(dt, this.totalElapsed, motionEnergy),
+    };
+
     // BPM: deriva lenta en reposo, sube con la patada y baja de vuelta.
     if (this.kickEnergy <= 0.02) {
       this.bpmTarget = clamp(
@@ -185,6 +261,8 @@ export class EEGSimulator {
       bpm: Math.round(this.bpm),
       movement: Number(this.movement.toFixed(3)),
       moment: this.phase,
+      gyro,
+      accel,
     };
   }
 }

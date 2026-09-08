@@ -30,6 +30,19 @@ cambio, ver nota de calibracion de bandas mas abajo):
   /eeg/movement     float 0-1
   /eeg/moment       "calibrando" | "operando" | "movimiento_abrupto"
 
+Extension: ejes de movimiento CRUDOS -- para viz/ (los cubos 3D) y para que el
+equipo de Pd los mapee a la musica como quiera. NO es parte del contrato
+historico de arriba (un route sin ese selector los descarta), y NO se
+filtran / normalizan / corrigen: es lo que da el sensor, tal cual.
+  /eeg/gyro/x       grados/s   tal cual del stream LSL GYRO del Muse
+  /eeg/gyro/y       grados/s    (reposo ~0; giro de cabeza +-50..150;
+  /eeg/gyro/z       grados/s    patada +-200..400)
+  /eeg/accel/x      g          tal cual del stream LSL ACC del Muse
+  /eeg/accel/y      g           (reposo: un eje ~+-1 = gravedad, los otros
+  /eeg/accel/z      g           ~0; en movimiento +-0.5..3)
+Si el stream GYRO o ACC no esta disponible, sus 3 direcciones mandan 0.
+`movement` (la magnitud 0-1 de arriba) se sigue calculando aparte, igual.
+
 NOTA sobre calibracion de bandas (por que delta/theta ya no dominan todo el
 tiempo): el espectro EEG cae ~1/f con la frecuencia -- delta (1-4Hz) tiene
 ordenes de magnitud mas potencia absoluta que gamma (30-45Hz) SIEMPRE, sin
@@ -105,6 +118,14 @@ OSC_ADDRESSES = {
     "bpm": "/eeg/bpm",
     "movement": "/eeg/movement",
     "moment": "/eeg/moment",
+    # Extension: ejes crudos de giro/acelerometro (para viz/ y el equipo de Pd).
+    # Aditivas -- Pd las rutea o no, no rompe nada. Ver README.md del proyecto.
+    "gyro_x": "/eeg/gyro/x",
+    "gyro_y": "/eeg/gyro/y",
+    "gyro_z": "/eeg/gyro/z",
+    "accel_x": "/eeg/accel/x",
+    "accel_y": "/eeg/accel/y",
+    "accel_z": "/eeg/accel/z",
 }
 
 BANDS = {
@@ -660,6 +681,32 @@ class MovementTracker:
 
 
 # ---------------------------------------------------------------------------
+# Ejes CRUDOS de un stream GYRO/ACC -> se mandan tal cual por OSC (grados/s o g),
+# sin bias, sin escala, sin suavizado. Es para que viz/ y el patch de Pd
+# trabajen directo con lo que da el sensor. Usa su PROPIO inlet (LSL permite
+# varios sobre el mismo stream) para no robarle samples a MovementTracker.
+# Si no hay inlet, queda en ceros.
+# ---------------------------------------------------------------------------
+class RawAxes:
+    def __init__(self, inlet):
+        self.inlet = inlet
+        self.xyz = [0.0, 0.0, 0.0]
+
+    def poll(self):
+        if self.inlet is None:
+            return
+        samples, _ = self.inlet.pull_chunk(timeout=0.0, max_samples=64)
+        # el ultimo sample FINITO: BlueMuse rellena con NaN las filas que le
+        # tocan a otro stream / cuando pierde paquetes BLE (ver la nota de
+        # no-finitos en BandPowerTracker.poll).
+        for sample in reversed(samples):
+            vec = np.asarray(sample, dtype=float)
+            if vec.size >= 3 and np.all(np.isfinite(vec[:3])):
+                self.xyz = [float(vec[0]), float(vec[1]), float(vec[2])]
+                return
+
+
+# ---------------------------------------------------------------------------
 # PPG -> bpm real via deteccion de picos. Requiere ventana de varios segundos
 # para ser estable; con pocos datos o senal ruidosa, mantiene el ultimo valor
 # valido (o el baseline si nunca hubo uno).
@@ -811,6 +858,20 @@ def resolve_optional(stream_types, timeout, label):
     return None
 
 
+def open_extra_inlet(stream_types, timeout=2.0):
+    """2do inlet del mismo stream (para leerlo desde dos consumidores sin que se
+    roben los samples). Prueba los nombres alternativos igual que
+    resolve_optional (GYRO/Gyroscope, ACC/Accelerometer); sin avisos -- se
+    llama solo cuando ya sabemos que el stream existe."""
+    if isinstance(stream_types, str):
+        stream_types = (stream_types,)
+    for stream_type in stream_types:
+        streams = resolve_byprop("type", stream_type, timeout=max(timeout / len(stream_types), 0.5))
+        if streams:
+            return StreamInlet(streams[0], max_buflen=EEG_MAX_BUFLEN)
+    return None
+
+
 def resolve_eeg_inlet(timeout=2.0):
     """Un intento de resolver + abrir el stream EEG. Devuelve el inlet o None.
     max_buflen chico a proposito: si el stream se congela y vuelve, no queremos
@@ -879,10 +940,10 @@ def main():
         )
     print(f"EEG conectado: {eeg_inlet.info().name()}")
 
-    gyro_inlet = resolve_optional(("GYRO", "Gyroscope"), args.stream_timeout, "movement quedara fijo (en BlueMuse activa el Gyroscope; en muselsl agrega '--gyro')")
-    acc_inlet = None
-    if gyro_inlet is None:
-        acc_inlet = resolve_optional(("ACC", "Accelerometer"), args.stream_timeout, "movement quedara fijo (en BlueMuse activa el Accelerometer; en muselsl agrega '--acc')")
+    # ACC se resuelve SIEMPRE (no solo como respaldo de movement): /eeg/accel/*
+    # lo necesita. movement sigue prefiriendo GYRO (gyro_inlet or acc_inlet).
+    gyro_inlet = resolve_optional(("GYRO", "Gyroscope"), args.stream_timeout, "movement quedara fijo y /eeg/gyro/* mandara 0 (en BlueMuse activa el Gyroscope; en muselsl agrega '--gyro')")
+    acc_inlet = resolve_optional(("ACC", "Accelerometer"), args.stream_timeout, "/eeg/accel/* mandara 0 (en BlueMuse activa el Accelerometer; en muselsl agrega '--acc')")
     ppg_inlet = resolve_optional(("PPG",), args.stream_timeout, f"bpm quedara fijo en {args.baseline_bpm} (en muselsl agrega '--ppg')")
     if gyro_inlet is None and acc_inlet is None:
         print("[aviso] sin GYRO ni ACC: 'movement' queda en su valor inicial y la "
@@ -890,6 +951,10 @@ def main():
 
     bands = BandPowerTracker(eeg_inlet, calib_settle_s=args.calib_settle)
     movement = MovementTracker(gyro_inlet or acc_inlet, scale=args.movement_scale, auto=args.movement_auto)
+    # ejes crudos para OSC (viz/ + Pd): inlet propio de cada stream para no
+    # competir por los samples con MovementTracker.
+    gyro_raw = RawAxes(open_extra_inlet(("GYRO", "Gyroscope")) if gyro_inlet is not None else None)
+    accel_raw = RawAxes(open_extra_inlet(("ACC", "Accelerometer")) if acc_inlet is not None else None)
     bpm = BpmTracker(ppg_inlet, baseline_bpm=args.baseline_bpm) if ppg_inlet else None
     phase = MomentPhase(
         calibration_s=args.calibration,
@@ -950,6 +1015,8 @@ def main():
 
             bands.poll(now, calibrating=calibrating, frozen=frozen)
             movement.poll(now, calibrating=calibrating)
+            gyro_raw.poll()
+            accel_raw.poll()
             if bpm is not None:
                 bpm.poll(now)
 
@@ -987,6 +1054,12 @@ def main():
             client.send_message(OSC_ADDRESSES["bpm"], round(bpm.bpm if bpm else args.baseline_bpm))
             client.send_message(OSC_ADDRESSES["movement"], round(movement.value, 3))
             client.send_message(OSC_ADDRESSES["moment"], current_phase)
+            client.send_message(OSC_ADDRESSES["gyro_x"], round(gyro_raw.xyz[0], 3))
+            client.send_message(OSC_ADDRESSES["gyro_y"], round(gyro_raw.xyz[1], 3))
+            client.send_message(OSC_ADDRESSES["gyro_z"], round(gyro_raw.xyz[2], 3))
+            client.send_message(OSC_ADDRESSES["accel_x"], round(accel_raw.xyz[0], 3))
+            client.send_message(OSC_ADDRESSES["accel_y"], round(accel_raw.xyz[1], 3))
+            client.send_message(OSC_ADDRESSES["accel_z"], round(accel_raw.xyz[2], 3))
 
             if args.debug:
                 health = "OK" if not bands.stalled else "SIN DATOS"

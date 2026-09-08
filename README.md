@@ -35,6 +35,19 @@ Por cada "frame" se mandan estos valores, como mensajes OSC independientes:
 
 `oscparse` en Pd vanilla descompone la dirección por "/" en símbolos separados, por lo que `/eeg/wave/delta 0.5` llega a Pd como la lista `eeg wave delta 0.5`. Ver [pd/eeg_receiver_test.pd](pd/eeg_receiver_test.pd) para el patrón de `route` correcto.
 
+### Extensión: ejes de movimiento crudos (`viz/` + equipo de Pd)
+
+Además de `movement` (la magnitud agregada 0–1), se mandan los **3 ejes del giroscopio y los 3 del acelerómetro por separado, tal cual salen del sensor** — sin filtrar, sin normalizar, sin corregir bias. Son para la visual ([viz/](viz/), los cubos 3D) y para que producción musical los mapee en el patch de Pd como quieran.
+
+Son direcciones **aditivas**: no forman parte del contrato de arriba. Si el patch de hoy no las rutea, `oscparse`/`route` las descarta solas — no rompen nada. El patch de producción decide si las usa.
+
+| Dirección OSC | Unidad | Reposo | En movimiento |
+|---|---|---|---|
+| `/eeg/gyro/x` `/eeg/gyro/y` `/eeg/gyro/z` | grados/segundo | ≈ 0 (± unos pocos de ruido) | giro de cabeza ±50–150, patada ±200–400 |
+| `/eeg/accel/x` `/eeg/accel/y` `/eeg/accel/z` | g (1g ≈ 9.81 m/s²) | un eje ≈ ±1 (gravedad), los otros ≈ 0 | ±0.5–3 según el golpe |
+
+Vienen de los streams LSL `GYRO` y `ACC` del Muse (BlueMuse en Windows; `muselsl stream --gyro --acc` en Mac). Si un stream no está disponible, esas 3 direcciones mandan `0`. El simulador genera valores en el mismo rango.
+
 ## Los 3 momentos
 
 1. **Calibración** (~60s, configurable) — `moment = "calibrando"`.

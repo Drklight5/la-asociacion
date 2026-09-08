@@ -46,6 +46,9 @@ STATE = {
     "delta": 0.5, "theta": 0.5, "beta": 0.5, "alfa": 0.5, "gamma": 0.5,
     "bpm": 72.0,
     "movement": 0.0,
+    # ejes crudos del sensor (grados/s y g) -- viz/ + equipo de Pd, ver README
+    "gyro_x": 0.0, "gyro_y": 0.0, "gyro_z": 0.0,
+    "accel_x": 0.0, "accel_y": 0.0, "accel_z": 0.0,
     "moment": "calibrando",
     "t": 0.0,          # epoch del ultimo dato OSC recibido
     "connected": False,  # True mientras llegue OSC del productor/simulador
@@ -56,7 +59,9 @@ CLIENTS: "set[websockets.WebSocketServerProtocol]" = set()
 
 def _apply(address: str, value) -> None:
     """Vuelca un mensaje OSC en STATE. Direcciones segun el contrato del repo:
-    /eeg/wave/<banda>, /eeg/bpm, /eeg/movement, /eeg/moment."""
+    /eeg/wave/<banda>, /eeg/bpm, /eeg/movement, /eeg/moment -- mas los ejes
+    crudos /eeg/gyro/<x|y|z> y /eeg/accel/<x|y|z> (extension aditiva, ver
+    README.md del proyecto y producer/muse_producer.py)."""
     parts = address.strip("/").split("/")
     if parts[:2] == ["eeg", "wave"] and len(parts) == 3 and parts[2] in BANDS:
         STATE[parts[2]] = float(value)
@@ -64,6 +69,8 @@ def _apply(address: str, value) -> None:
         STATE["bpm"] = float(value)
     elif parts == ["eeg", "movement"]:
         STATE["movement"] = float(value)
+    elif parts[:2] in (["eeg", "gyro"], ["eeg", "accel"]) and len(parts) == 3 and parts[2] in ("x", "y", "z"):
+        STATE[f"{parts[1]}_{parts[2]}"] = float(value)
     elif parts == ["eeg", "moment"]:
         STATE["moment"] = str(value)
     else:
