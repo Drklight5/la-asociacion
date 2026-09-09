@@ -25,11 +25,11 @@
 #X obj 521 167 % 8;
 #X obj 263 67 rate 8;
 #X obj 729 317 < 50;
-#X obj 353 310 - 60;
 #X msg 120 545 \$1 100 2;
+#X obj 353 310 - 36;
 #X connect 0 0 1 0;
 #X connect 1 0 3 0;
-#X connect 2 0 26 0;
+#X connect 2 0 27 0;
 #X connect 3 0 18 0;
 #X connect 9 0 10 0;
 #X connect 10 0 22 0;
@@ -41,7 +41,7 @@
 #X connect 15 0 16 0;
 #X connect 16 0 12 0;
 #X connect 17 0 21 0;
-#X connect 18 0 27 0;
+#X connect 18 0 26 0;
 #X connect 20 0 12 0;
 #X connect 21 0 0 0;
 #X connect 21 1 13 0;
@@ -50,5 +50,5 @@
 #X connect 24 0 20 0;
 #X connect 25 0 19 0;
 #X connect 25 0 18 1;
-#X connect 26 0 3 1;
-#X connect 27 0 11 0;
+#X connect 26 0 11 0;
+#X connect 27 0 3 1;
