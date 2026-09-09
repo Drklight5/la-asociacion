@@ -2,14 +2,16 @@
 # ============================================================
 #  La Asociacion  |  Arranque en 1 clic  |  macOS (Apple Silicon)
 #
-#  Doble clic en este archivo. Levanta los 4 procesos:
+#  Doble clic en este archivo. Levanta TODA la obra:
 #    1. muselsl stream           -- puente Bluetooth del Muse 2
 #    2. viz/bridge.py            -- relay OSC + WebSocket
 #    3. http.server              -- la grafica en http://localhost:8000
-#    4. producer/muse_producer   -- Muse 2 -> OSC        (esta ventana)
+#    4. Pure Data                -- abre el patch          (PD_PATCH)
+#    5. Reaper                   -- abre el proyecto       (REAPER_PROJECT)
+#    6. producer/muse_producer   -- Muse 2 -> OSC        (esta ventana)
 #
-#  NO toca Pure Data. Abri el patch como siempre; escucha en 9000 y
-#  recibe los datos a traves del bridge sin cambiar nada.
+#  Todo se configura en deploy/config.txt. Cerrar esta ventana detiene
+#  todo (incl. Pd y Reaper si CERRAR_TODO=si).
 #
 #  La primera vez, si macOS bloquea el archivo:
 #    clic derecho -> Abrir -> Abrir.
@@ -25,6 +27,9 @@ ABRIR_NAVEGADOR="si"
 BRIDGE_PORT=9001
 PD_PORT=9000
 WEB_PORT=8000
+PD_PATCH="pureDataPatch-v0.6/subpatches/1-Draft.pd"
+REAPER_PROJECT="reaperProject.RPP"
+CERRAR_TODO="si"
 
 if [ -f deploy/config.txt ]; then
   while IFS='=' read -r key val; do
@@ -37,9 +42,15 @@ if [ -f deploy/config.txt ]; then
       BRIDGE_PORT)      BRIDGE_PORT=$val ;;
       PD_PORT)          PD_PORT=$val ;;
       WEB_PORT)         WEB_PORT=$val ;;
+      PD_PATCH)         PD_PATCH=$val ;;
+      REAPER_PROJECT)   REAPER_PROJECT=$val ;;
+      CERRAR_TODO)      CERRAR_TODO=$val ;;
     esac
   done < deploy/config.txt
 fi
+# PD_EXE / REAPER_EXE / BLUEMUSE_AUTO son solo de Windows -- en macOS se usa
+# 'open' con la app por defecto de cada tipo de archivo, y el puente del Muse
+# es muselsl (mas abajo), no BlueMuse.
 
 pause() { echo; read -n 1 -s -r -p "Enter para cerrar..."; echo; }
 
@@ -71,8 +82,28 @@ cleanup() {
   echo
   echo "[fin] Deteniendo servicios..."
   for pid in "${PIDS[@]}"; do kill "$pid" >/dev/null 2>&1; done
+  if [ "${CERRAR_TODO:-si}" = "si" ]; then
+    echo "[fin] Cerrando Pure Data y Reaper..."
+    osascript -e 'tell application "Pd" to quit'     >/dev/null 2>&1
+    osascript -e 'tell application "REAPER" to quit' >/dev/null 2>&1
+    pkill -x Pd     >/dev/null 2>&1
+    pkill -x REAPER >/dev/null 2>&1
+  fi
 }
 trap cleanup EXIT INT TERM
+
+# abre un documento con su app (o la preferida). $1 ruta relativa | $2 app | $3 etiqueta
+abrir_doc() {
+  [ -z "$1" ] && return 0
+  if [ ! -e "$1" ]; then
+    echo "[aviso] no existe $3: $1  (revisa deploy/config.txt)"; return 0
+  fi
+  if open -a "$2" "$PWD/$1" 2>/dev/null || open "$PWD/$1" 2>/dev/null; then
+    echo "[run] abriendo $3: $1"
+  else
+    echo "[aviso] no pude abrir $3 ($1). Abrilo a mano."
+  fi
+}
 
 # ---- 1. puente Bluetooth del Muse (muselsl) ----
 echo
@@ -111,6 +142,10 @@ PIDS+=($!)
 echo "[3/4] Sirviendo la grafica en http://localhost:$WEB_PORT ..."
 "$PY" -m http.server "$WEB_PORT" --directory viz >/dev/null 2>&1 &
 PIDS+=($!)
+
+# ---- Pure Data + Reaper (los programas de la obra) ----
+abrir_doc "$PD_PATCH"       "Pd"     "Pure Data"
+abrir_doc "$REAPER_PROJECT" "REAPER" "Reaper"
 
 sleep 2
 if [ "$ABRIR_NAVEGADOR" = "si" ]; then

@@ -15,6 +15,31 @@ MUSE_STREAM_ARGS=--acc --gyro --ppg
 # Ej:  --calibration 45   |   --skip-calibration   |   --debug
 PRODUCER_ARGS=
 
+# --- Programas de la obra (Pure Data / Reaper / BlueMuse) -------------------
+# El lanzador abre estos programas junto con el resto. Dejar el PATCH / PROJECT
+# vacio para NO abrir ese programa.
+
+# Ruta al ejecutable. Vacio = autodetectar en las ubicaciones tipicas
+# (Program Files\Pd*, Purr Data, REAPER (x64), etc.). Solo hace falta ponerlo
+# si esta instalado en un lugar raro.
+PD_EXE=
+REAPER_EXE=
+
+# Que se abre al arrancar (rutas relativas a la raiz del repo):
+PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd
+REAPER_PROJECT=reaperProject.RPP
+
+# Windows: arrancar BlueMuse y su streaming solo, via bluemuse://startall.
+#   si = automatico (ya no hace falta abrir BlueMuse a mano)
+#   no = como antes: el lanzador te recuerda abrirlo y darle Start Streaming
+BLUEMUSE_AUTO=si
+
+# Al cerrar la ventana principal, cerrar tambien Pd y Reaper (y parar BlueMuse):
+#   si = cierre total en 1 paso  |  no = se quedan abiertos (los cerras vos)
+# OJO: "si" hace taskkill de TODO pd.exe / reaper.exe de la maquina y puede
+# descartar cambios sin guardar en Reaper. Pensado para la maquina del venue.
+CERRAR_TODO=si
+
 # --- Grafica -------------------------------------------------------------
 # Abrir el navegador con la grafica automaticamente:  si  /  no
 ABRIR_NAVEGADOR=si
