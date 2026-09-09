@@ -3,8 +3,11 @@
  *
  * Grafica de lineas en tiempo real de las 5 bandas EEG (delta/theta/alfa/beta/
  * gamma) + animaciones que acompanan: fondo que reacciona a la banda dominante,
- * campo de particulas segun activacion, pulso al ritmo del BPM, y un "glitch"
- * corto cuando llega 'movimiento_abrupto' (la patada).
+ * campo de particulas segun activacion, pulso al ritmo del BPM, un "glitch"
+ * corto cuando llega 'movimiento_abrupto' (la patada), cubos 3D interpuestos
+ * que rotan con el giroscopio y laten con el bpm (drawCubes), y una barra
+ * inferior con el icono+color de cada banda (tamano = valor) y un corazon con
+ * el bpm (drawBottomBar, tecla 'l').
  *
  * Datos: WebSocket del bridge (viz/bridge.py). Sin datos -> modo demo interno.
  *
@@ -19,12 +22,14 @@ const WS_URL = "ws://" + (QS.get("ws") || "localhost:8765");
 const LITE = QS.has("lite");
 
 // Paleta = la misma que el patch de Pd (chart-colors). Orden: freq baja -> alta.
+// `icon` reemplaza al nombre en la barra inferior (letra griega de la banda,
+// simbolo estandar en EEG) -- ver drawBottomBar().
 const BANDS = [
-  { key: "delta", label: "DELTA", color: "#4ce519" },
-  { key: "theta", label: "THETA", color: "#9800f7" },
-  { key: "alfa",  label: "ALFA",  color: "#0e0ef9" },
-  { key: "beta",  label: "BETA",  color: "#dbdb1a" },
-  { key: "gamma", label: "GAMMA", color: "#ea415d" },
+  { key: "delta", label: "DELTA", icon: "δ", color: "#4ce519" },
+  { key: "theta", label: "THETA", icon: "θ", color: "#9800f7" },
+  { key: "alfa",  label: "ALFA",  icon: "α", color: "#0e0ef9" },
+  { key: "beta",  label: "BETA",  icon: "β", color: "#dbdb1a" },
+  { key: "gamma", label: "GAMMA", icon: "γ", color: "#ea415d" },
 ];
 
 // --- historial (ring buffer) --------------------------------------------------
@@ -37,7 +42,10 @@ let histHead = 0;
 let histAccum = 0;
 
 // --- estado -----------------------------------------------------------------
-const target = { delta: .5, theta: .5, alfa: .5, beta: .5, gamma: .5, bpm: 72, movement: 0, moment: "calibrando" };
+const target = {
+  delta: .5, theta: .5, alfa: .5, beta: .5, gamma: .5, bpm: 72, movement: 0,
+  gyro_x: 0, gyro_y: 0, gyro_z: 0, moment: "calibrando",
+};
 const shown  = Object.assign({}, target);
 
 let sock = null;
@@ -56,6 +64,85 @@ const P = [];
 
 // --- demo -----------------------------------------------------------------
 let demoT = 0, demoKickAt = 9 + Math.random() * 12, demoMoment = "calibrando";
+
+// --- cubos 3D (giroscopio) --------------------------------------------------
+// El gyro llega CRUDO en grados/s (lo que da el sensor / el simulador) y es
+// VELOCIDAD angular, no orientacion -- se integra en el tiempo para dar una
+// rotacion acumulada, igual que un giroscopio real. Proyeccion manual (sin
+// WEBGL) para dibujar los cubos con las mismas primitivas 2D + blendMode(ADD)
+// que el resto del sketch, sobre el mismo canvas.
+let cubeRotX = 0.3, cubeRotY = 0.6, cubeRotZ = 0;
+const GYRO_GAIN = 0.007;     // grados/s -> rad/s de giro del cubo (~100 deg/s ~ 0.7 rad/s)
+const GYRO_DRIFT = 0.06;     // deriva lenta constante -- nunca queda del todo quieto
+
+const CUBE_VERTS = [
+  [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+  [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1],
+];
+const CUBE_EDGES = [
+  [0, 1], [1, 2], [2, 3], [3, 0],
+  [4, 5], [5, 6], [6, 7], [7, 4],
+  [0, 4], [1, 5], [2, 6], [3, 7],
+];
+// 3 cubos superpuestos (mismo centro), cada uno con su propio tamano/offset de
+// rotacion/opacidad -- de ahi el patron facetado tipo "cubos interpuestos".
+const CUBES = [
+  { size: 1.00, off: [0, 0, 0], dash: false, alpha: 1.00 },
+  { size: 0.80, off: [0.55, 1.05, 0.30], dash: true, alpha: 0.70 },
+  { size: 0.62, off: [-0.80, 0.35, 0.95], dash: false, alpha: 0.50 },
+];
+
+function stepGyro(dt) {
+  cubeRotX += shown.gyro_x * GYRO_GAIN * dt;
+  cubeRotY += (shown.gyro_y * GYRO_GAIN + GYRO_DRIFT) * dt;
+  cubeRotZ += shown.gyro_z * GYRO_GAIN * dt;
+}
+
+function rotatePoint(p, rx, ry, rz) {
+  let [x, y, z] = p;
+  let y1 = y * Math.cos(rx) - z * Math.sin(rx);
+  let z1 = y * Math.sin(rx) + z * Math.cos(rx);
+  let x2 = x * Math.cos(ry) + z1 * Math.sin(ry);
+  let z2 = -x * Math.sin(ry) + z1 * Math.cos(ry);
+  let x3 = x2 * Math.cos(rz) - y1 * Math.sin(rz);
+  let y3 = x2 * Math.sin(rz) + y1 * Math.cos(rz);
+  return [x3, y3, z2];
+}
+
+function projectPoint(p, cx, cy, scale) {
+  const depth = 3.4;
+  const f = depth / (depth + p[2]);
+  return [cx + p[0] * scale * f, cy + p[1] * scale * f];
+}
+
+function drawCubes(dom) {
+  const cx = width / 2, cy = height * 0.62;             // mismo centro que el anillo de latido
+  const baseScale = Math.min(width, height) * 0.15;
+  // pulso: laten con el bpm (mismo beatPhase que drawBeatRing) + un salto en la patada
+  const pulse = 1 + 0.08 * Math.max(0, Math.sin(beatPhase * Math.PI * 2)) * (0.5 + 0.5 * beatFlash) + 0.4 * glitch;
+
+  const base = color(255);
+  const tint = lerpColor(base, color(dom.color), 0.4);
+
+  push();
+  blendMode(ADD);
+  noFill();
+  strokeWeight(1.1);
+  for (const cu of CUBES) {
+    const rx = cubeRotX + cu.off[0];
+    const ry = cubeRotY + cu.off[1];
+    const rz = cubeRotZ + cu.off[2];
+    const scale = baseScale * cu.size * pulse;
+    const pts = CUBE_VERTS.map((v) => projectPoint(rotatePoint(v, rx, ry, rz), cx, cy, scale));
+
+    stroke(red(tint), green(tint), blue(tint), 200 * cu.alpha);
+    drawingContext.setLineDash(cu.dash ? [5, 5] : []);
+    for (const [a, b] of CUBE_EDGES) line(pts[a][0], pts[a][1], pts[b][0], pts[b][1]);
+  }
+  drawingContext.setLineDash([]);
+  blendMode(BLEND);
+  pop();
+}
 
 // ---------------------------------------------------------------------------
 function setup() {
@@ -105,6 +192,9 @@ function connect() {
     for (const k of ["delta", "theta", "alfa", "beta", "gamma", "movement"]) {
       if (k in d) target[k] = constrain(+d[k], 0, 1);
     }
+    for (const k of ["gyro_x", "gyro_y", "gyro_z"]) {   // crudo, grados/s
+      if (k in d) target[k] = constrain(+d[k], -2000, 2000);
+    }
     if ("bpm" in d) target.bpm = constrain(+d.bpm, 30, 220);
     if ("moment" in d && typeof d.moment === "string") target.moment = d.moment;
   };
@@ -120,7 +210,7 @@ function draw() {
   // suavizado hacia target (independiente del framerate)
   const kFast = 1 - Math.pow(0.0015, dt);
   const kSlow = 1 - Math.pow(0.03, dt);
-  for (const k of ["delta", "theta", "alfa", "beta", "gamma", "movement"]) {
+  for (const k of ["delta", "theta", "alfa", "beta", "gamma", "movement", "gyro_x", "gyro_y", "gyro_z"]) {
     shown[k] += (target[k] - shown[k]) * kFast;
   }
   shown.bpm += (target.bpm - shown.bpm) * kSlow;
@@ -143,6 +233,7 @@ function draw() {
   if (beatPhase >= 1) { beatPhase -= 1; beatFlash = 1; }
   beatFlash = Math.max(0, beatFlash - dt * 3.2);
   glitch = Math.max(0, glitch - dt * 0.85);
+  stepGyro(dt);
 
   const calibrating = shown.moment === "calibrando";
   const dom = dominantBand();
@@ -154,11 +245,12 @@ function draw() {
   push();
   if (glitch > 0.002) translate(random(-1, 1) * 16 * glitch, random(-1, 1) * 11 * glitch);
   drawBandLines(calibrating);
+  drawCubes(dom);
   pop();
 
   if (glitch > 0.002) drawGlitchOverlay();
   if (calibrating) drawCalibrationOverlay();
-  if (showLabels) drawLabels(dom);
+  if (showLabels) drawBottomBar(dom);
   if (!live) drawSourceTag();
 }
 
@@ -314,26 +406,46 @@ function drawCalibrationOverlay() {
   text("C A L I B R A N D O", width / 2, height * 0.055);
 }
 
-function drawLabels(dom) {
+// Barra inferior: un icono (letra griega) por banda, coloreado con la paleta
+// de esa banda, sin nombres de texto. El tamano del icono es proporcional al
+// valor de la banda -- la banda dominante ya se lee sola por ser la mas
+// grande, asi que no hace falta un label aparte para eso. Termina en un
+// corazon que late con el bpm (mismo beatPhase/beatFlash que drawBeatRing) y
+// el numero, mas grande que los iconos de banda.
+function drawBottomBar(dom) {
+  const unit = Math.min(width, height);
+  const baseSize = unit * 0.034;
+  const gap = unit * 0.085;
+  const y = height * 0.94;
+  const n = BANDS.length;
+
   push();
-  textAlign(LEFT, CENTER);
-  const x = Math.min(width, height) * 0.06;
-  let y = height * 0.15;
-  const lh = Math.min(width, height) * 0.03;
-  textSize(Math.min(width, height) * 0.017);
+  textAlign(CENTER, CENTER);
+  blendMode(ADD);
+
+  let x = width / 2 - (gap * (n - 1)) / 2 - gap * 0.85;
   for (const b of BANDS) {
+    const v = shown[b.key];
+    const isDom = b.key === dom.key;
+    const sz = baseSize * (0.65 + 1.05 * v) * (isDom ? 1.15 : 1);
     const c = color(b.color);
-    fill(red(c), green(c), blue(c), 235);
-    text(b.label.padEnd(6) + " " + shown[b.key].toFixed(2), x, y);
-    y += lh;
+    fill(red(c), green(c), blue(c), 210 + 45 * v);
+    textSize(sz);
+    text(b.icon, x, y);
+    x += gap;
   }
-  textAlign(RIGHT, TOP);
-  fill(255, 220);
-  textSize(Math.min(width, height) * 0.05);
-  text(dom.label, width * 0.94, height * 0.10);
-  fill(255, 150);
-  textSize(Math.min(width, height) * 0.02);
-  text(Math.round(shown.bpm) + " bpm   mov " + shown.movement.toFixed(2), width * 0.94, height * 0.17);
+
+  // corazon + bpm -- separado del grupo de bandas, mas grande que sus iconos
+  const heartPulse = 1 + 0.55 * beatFlash + 0.12 * Math.max(0, Math.sin(beatPhase * Math.PI * 2));
+  x += gap * 0.35;
+  fill(232, 64, 90, 235);
+  textSize(baseSize * 1.5 * heartPulse);
+  text("♥", x, y);
+  x += gap * 0.85;
+  fill(255, 230);
+  textAlign(LEFT, CENTER);
+  textSize(baseSize * 1.15);
+  text(Math.round(shown.bpm), x, y);
   pop();
 }
 
@@ -400,6 +512,12 @@ function stepDemo(dt) {
   } else {
     target.movement = lerp(target.movement, 0.05 + 0.05 * noise(frameCount * 0.02), 0.1);
   }
+
+  // gyro fake (grados/s) para que los cubos se muevan tambien en demo (sin bridge)
+  const gEnergy = (0.15 + target.movement * 0.9) * 130;
+  target.gyro_x = (noise(100 + frameCount * 0.01) - 0.5) * 2 * gEnergy;
+  target.gyro_y = (noise(200 + frameCount * 0.013) - 0.5) * 2 * gEnergy;
+  target.gyro_z = (noise(300 + frameCount * 0.008) - 0.5) * 2 * gEnergy;
 }
 
 // --- teclado -----------------------------------------------------------------
