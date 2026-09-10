@@ -7,7 +7,7 @@ REM    1. BlueMuse      -- puente Bluetooth del Muse + streaming   (BLUEMUSE_AUT
 REM    2. bridge        -- viz\bridge.py, relay OSC + WebSocket
 REM    3. grafica       -- http.server en http://localhost:8000
 REM    4. Pure Data     -- abre el patch                 (PD_PATCH)
-REM    5. Reaper        -- abre el proyecto              (REAPER_PROJECT)
+REM    5. Reaper        -- abre el proyecto (REAPER_PROJECT) + autoplay (AUTOPLAY)
 REM    6. productor     -- muse_producer.py, Muse 2 -> OSC   (esta ventana)
 REM
 REM  Todo se configura en deploy\config.txt.
@@ -33,6 +33,8 @@ set "PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd"
 set "REAPER_PROJECT=reaperProject.RPP"
 set "BLUEMUSE_AUTO=si"
 set "CERRAR_TODO=si"
+set "AUTOPLAY="
+set "AUTOPLAY_DELAY=15"
 
 if exist "deploy\config.txt" (
   for /f "usebackq eol=# tokens=1,* delims==" %%A in ("deploy\config.txt") do (
@@ -49,12 +51,15 @@ if exist "deploy\config.txt" (
     if /i "%%A"=="REAPER_PROJECT"   set "REAPER_PROJECT=%%B"
     if /i "%%A"=="BLUEMUSE_AUTO"    set "BLUEMUSE_AUTO=%%B"
     if /i "%%A"=="CERRAR_TODO"      set "CERRAR_TODO=%%B"
+    if /i "%%A"=="AUTOPLAY"         set "AUTOPLAY=%%B"
+    if /i "%%A"=="AUTOPLAY_DELAY"   set "AUTOPLAY_DELAY=%%B"
   )
 )
 
 REM ---- rutas del config (admiten "/" ) a backslash de Windows ----
 set "PD_PATCH_WIN=%PD_PATCH:/=\%"
 set "REAPER_PROJECT_WIN=%REAPER_PROJECT:/=\%"
+set "AUTOPLAY_WIN=%AUTOPLAY:/=\%"
 
 REM ---- Python disponible? ----
 where python >nul 2>nul
@@ -179,6 +184,16 @@ if not exist "%CD%\%REAPER_PROJECT_WIN%" (
 )
 echo [run] Abriendo Reaper: %REAPER_PROJECT_WIN%
 start "" "%REAPER_EXE%" "%CD%\%REAPER_PROJECT_WIN%"
+
+REM ---- autoplay: correr el ReaScript en la instancia de Reaper ya abierta ----
+if not defined AUTOPLAY goto skip_reaper
+if "%AUTOPLAY%"=="" goto skip_reaper
+if not exist "%CD%\%AUTOPLAY_WIN%" (
+  echo [aviso] Autoplay: falta %AUTOPLAY_WIN% ^(lo sube tu companiero^) -- Reaper abre sin autoplay
+  goto skip_reaper
+)
+echo [run] Autoplay de Reaper en %AUTOPLAY_DELAY%s: %AUTOPLAY_WIN%
+start "LA-ASOCIACION-AUTOPLAY" /min "%COMSPEC%" /c "timeout /t %AUTOPLAY_DELAY% /nobreak >nul & "%REAPER_EXE%" -nonewinst "%CD%\%AUTOPLAY_WIN%""
 :skip_reaper
 
 REM ---- abrir el navegador ----
@@ -204,8 +219,9 @@ REM  Al salir del productor: bajar todo
 REM ============================================================
 echo.
 echo [fin] Deteniendo bridge y servidor de la grafica...
-taskkill /f /t /fi "WINDOWTITLE eq LA-ASOCIACION-BRIDGE*" >nul 2>nul
-taskkill /f /t /fi "WINDOWTITLE eq LA-ASOCIACION-WEB*"    >nul 2>nul
+taskkill /f /t /fi "WINDOWTITLE eq LA-ASOCIACION-BRIDGE*"   >nul 2>nul
+taskkill /f /t /fi "WINDOWTITLE eq LA-ASOCIACION-WEB*"      >nul 2>nul
+taskkill /f /t /fi "WINDOWTITLE eq LA-ASOCIACION-AUTOPLAY*" >nul 2>nul
 
 if /i "%CERRAR_TODO%"=="si" (
   echo [fin] Cerrando Pure Data y Reaper...

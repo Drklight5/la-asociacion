@@ -27,9 +27,11 @@ ABRIR_NAVEGADOR="si"
 BRIDGE_PORT=9001
 PD_PORT=9000
 WEB_PORT=8000
-PD_PATCH="pureDataPatch-v0.6/subpatches/1-Draft.pd"
+PD_PATCH="pureDataPatch-v0.7/1-Draft.pd"
 REAPER_PROJECT="reaperProject.RPP"
 CERRAR_TODO="si"
+AUTOPLAY=""
+AUTOPLAY_DELAY=15
 
 if [ -f deploy/config.txt ]; then
   while IFS='=' read -r key val; do
@@ -45,6 +47,8 @@ if [ -f deploy/config.txt ]; then
       PD_PATCH)         PD_PATCH=$val ;;
       REAPER_PROJECT)   REAPER_PROJECT=$val ;;
       CERRAR_TODO)      CERRAR_TODO=$val ;;
+      AUTOPLAY)         AUTOPLAY=$val ;;
+      AUTOPLAY_DELAY)   AUTOPLAY_DELAY=$val ;;
     esac
   done < deploy/config.txt
 fi
@@ -105,6 +109,31 @@ abrir_doc() {
   fi
 }
 
+# ruta al binario de REAPER (para correr un ReaScript, no solo abrir un doc)
+reaper_bin() {
+  local c
+  for c in "/Applications/REAPER.app/Contents/MacOS/REAPER" \
+           "$HOME/Applications/REAPER.app/Contents/MacOS/REAPER"; do
+    [ -x "$c" ] && { printf '%s' "$c"; return 0; }
+  done
+  return 1
+}
+
+# corre el ReaScript de autoplay en Reaper, unos segundos despues de abrir el
+# proyecto (para que termine de cargar). $1 = ruta al .lua
+autoplay_reaper() {
+  [ -z "$1" ] && return 0
+  if [ ! -e "$1" ]; then
+    echo "[aviso] autoplay: falta $1 (lo sube tu companiero) -- Reaper abre sin autoplay"
+    return 0
+  fi
+  local rb
+  rb="$(reaper_bin)" || { echo "[aviso] autoplay: no encontre el binario de REAPER -- dale play a mano"; return 0; }
+  echo "[run] autoplay de Reaper en ${AUTOPLAY_DELAY}s: $1"
+  ( sleep "$AUTOPLAY_DELAY"; "$rb" -nonewinst "$PWD/$1" >/dev/null 2>&1 ) &
+  PIDS+=($!)
+}
+
 # ---- 1. puente Bluetooth del Muse (muselsl) ----
 echo
 echo "[1/4] Iniciando el puente Bluetooth del Muse (muselsl)..."
@@ -146,6 +175,7 @@ PIDS+=($!)
 # ---- Pure Data + Reaper (los programas de la obra) ----
 abrir_doc "$PD_PATCH"       "Pd"     "Pure Data"
 abrir_doc "$REAPER_PROJECT" "REAPER" "Reaper"
+autoplay_reaper "$AUTOPLAY"
 
 sleep 2
 if [ "$ABRIR_NAVEGADOR" = "si" ]; then
