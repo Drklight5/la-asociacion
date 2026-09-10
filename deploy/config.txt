@@ -29,6 +29,11 @@ REAPER_EXE=
 PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd
 REAPER_PROJECT=reaperProject.RPP
 
+# ReaScript de autoplay: se corre en Reaper unos segundos despues de abrir el
+# proyecto (para que termine de cargar). Vacio = Reaper abre sin autoplay.
+AUTOPLAY=deploy/Autoplay.lua
+AUTOPLAY_DELAY=15
+
 # Windows: arrancar BlueMuse y su streaming solo, via bluemuse://startall.
 #   si = automatico (ya no hace falta abrir BlueMuse a mano)
 #   no = como antes: el lanzador te recuerda abrirlo y darle Start Streaming

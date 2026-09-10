@@ -34,7 +34,9 @@ Muse 2 --BLE-->  muselsl (Mac) / BlueMuse (Win)  --LSL-->  producer/muse_produce
 4. Sirve **`viz/`** en `http://localhost:8000` y abre el navegador.
 5. Abre **Pure Data** con `PD_PATCH` y **Reaper** con `REAPER_PROJECT`
    (ver *Configuración*). El DSP de Pd arranca solo (el patch trae el
-   `loadbang → ; pd dsp 1`).
+   `loadbang → ; pd dsp 1`). Si `AUTOPLAY` apunta a un ReaScript, lo corre en
+   Reaper `AUTOPLAY_DELAY` segundos después (para que el proyecto termine de
+   cargar).
 6. Deja el **productor del Muse** corriendo en la ventana principal. Ahí escribís
    `kick` / `skip` / `reset` / `quit` + Enter.
 
@@ -49,7 +51,11 @@ Se abren solos con el patch / proyecto que indiques en `config.txt`:
   El patch escucha en el puerto **9000** y recibe los datos a través del bridge
   sin ningún cambio; el DSP se enciende solo.
 - **Reaper** — `REAPER_PROJECT` (por defecto `reaperProject.RPP`). Abre el
-  proyecto; el *play* lo das vos.
+  proyecto. Si `AUTOPLAY` está seteado (por defecto `deploy/Autoplay.lua`), el
+  lanzador corre ese ReaScript en Reaper `AUTOPLAY_DELAY` s después de abrir el
+  proyecto (Windows: `reaper.exe -nonewinst`; macOS: el binario de REAPER). Si
+  el `.lua` todavía no está en el repo, Reaper abre igual y solo avisa. Dejá
+  `AUTOPLAY` vacío para dar *play* a mano.
 
 El lanzador busca `pd.exe` / `reaper.exe` en las rutas típicas. Si están
 instalados en otro lado, poné la ruta completa en `PD_EXE` / `REAPER_EXE`. Para
@@ -72,6 +78,8 @@ PD_EXE=                 # ruta a pd.exe; vacío = autodetectar
 REAPER_EXE=             # ruta a reaper.exe; vacío = autodetectar
 PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd   # patch que abre; vacío = no abrir Pd
 REAPER_PROJECT=reaperProject.RPP                    # proyecto que abre; vacío = no abrir Reaper
+AUTOPLAY=deploy/Autoplay.lua   # ReaScript que corre en Reaper tras abrir; vacío = play a mano
+AUTOPLAY_DELAY=15      # segundos a esperar antes de correr el ReaScript
 BLUEMUSE_AUTO=si        # Windows: arrancar BlueMuse + streaming solo
 CERRAR_TODO=si          # al cerrar, cerrar también Pd y Reaper
 BRIDGE_PORT=9001        # el productor manda acá
@@ -106,6 +114,9 @@ falsos está [`simulator/`](../simulator/) (su propio `iniciar.bat` /
   Settings). El enrutado Pd → Reaper es setup de la máquina.
 - **BlueMuse no arranca solo** → abrilo una vez a mano para que Windows registre
   el esquema `bluemuse://`, o poné `BLUEMUSE_AUTO=no`.
+- **Autoplay no dispara** → subí el `AUTOPLAY_DELAY` si el proyecto tarda en
+  cargar; confirmá que `AUTOPLAY` apunta a un `.lua` que existe y que Reaper
+  corre ReaScripts.
 - **La gráfica queda en demo / no conecta** → el bridge no está recibiendo OSC;
   revisá que el Muse esté transmitiendo (BlueMuse "Streaming" / `muselsl`).
 - **macOS no deja abrir el `.command`** → clic derecho → Abrir → Abrir.
