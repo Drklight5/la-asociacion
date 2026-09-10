@@ -31,7 +31,7 @@ REAPER_PROJECT=reaperProject.RPP
 
 # ReaScript de autoplay: se corre en Reaper unos segundos despues de abrir el
 # proyecto (para que termine de cargar). Vacio = Reaper abre sin autoplay.
-AUTOPLAY=deploy/Autoplay.lua
+AUTOPLAY=deploy/autoplay.lua
 AUTOPLAY_DELAY=15
 
 # Windows: arrancar BlueMuse y su streaming solo, via bluemuse://startall.

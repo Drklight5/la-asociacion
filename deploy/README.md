@@ -51,11 +51,12 @@ Se abren solos con el patch / proyecto que indiques en `config.txt`:
   El patch escucha en el puerto **9000** y recibe los datos a través del bridge
   sin ningún cambio; el DSP se enciende solo.
 - **Reaper** — `REAPER_PROJECT` (por defecto `reaperProject.RPP`). Abre el
-  proyecto. Si `AUTOPLAY` está seteado (por defecto `deploy/Autoplay.lua`), el
+  proyecto. Si `AUTOPLAY` está seteado (por defecto `deploy/autoplay.lua`), el
   lanzador corre ese ReaScript en Reaper `AUTOPLAY_DELAY` s después de abrir el
-  proyecto (Windows: `reaper.exe -nonewinst`; macOS: el binario de REAPER). Si
-  el `.lua` todavía no está en el repo, Reaper abre igual y solo avisa. Dejá
-  `AUTOPLAY` vacío para dar *play* a mano.
+  proyecto (Windows: `reaper.exe -nonewinst`; macOS: el binario de REAPER). El
+  `autoplay.lua` que viene en el repo va al inicio del proyecto y da *play*
+  (no hace nada si ya está sonando). Si el `.lua` no existe, Reaper abre igual
+  y solo avisa. Dejá `AUTOPLAY` vacío para dar *play* a mano.
 
 El lanzador busca `pd.exe` / `reaper.exe` en las rutas típicas. Si están
 instalados en otro lado, poné la ruta completa en `PD_EXE` / `REAPER_EXE`. Para
@@ -78,7 +79,7 @@ PD_EXE=                 # ruta a pd.exe; vacío = autodetectar
 REAPER_EXE=             # ruta a reaper.exe; vacío = autodetectar
 PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd   # patch que abre; vacío = no abrir Pd
 REAPER_PROJECT=reaperProject.RPP                    # proyecto que abre; vacío = no abrir Reaper
-AUTOPLAY=deploy/Autoplay.lua   # ReaScript que corre en Reaper tras abrir; vacío = play a mano
+AUTOPLAY=deploy/autoplay.lua   # ReaScript que corre en Reaper tras abrir; vacío = play a mano
 AUTOPLAY_DELAY=15      # segundos a esperar antes de correr el ReaScript
 BLUEMUSE_AUTO=si        # Windows: arrancar BlueMuse + streaming solo
 CERRAR_TODO=si          # al cerrar, cerrar también Pd y Reaper
