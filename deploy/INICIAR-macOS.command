@@ -146,6 +146,7 @@ PIDS+=($!)
 # ---- Pure Data + Reaper (los programas de la obra) ----
 abrir_doc "$PD_PATCH"       "Pd"     "Pure Data"
 abrir_doc "$REAPER_PROJECT" "REAPER" "Reaper"
+abrir_doc "$AUTOPLAY"       "Autoplay" "Autoplay.lua"
 
 sleep 2
 if [ "$ABRIR_NAVEGADOR" = "si" ]; then
