@@ -28,6 +28,7 @@ REAPER_EXE=
 # Que se abre al arrancar (rutas relativas a la raiz del repo):
 PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd
 REAPER_PROJECT=reaperProject.RPP
+AUTOPLAY=deploy/Autoplay.lua
 
 # Windows: arrancar BlueMuse y su streaming solo, via bluemuse://startall.
 #   si = automatico (ya no hace falta abrir BlueMuse a mano)
