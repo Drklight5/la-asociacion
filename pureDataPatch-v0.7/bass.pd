@@ -22,7 +22,6 @@
 #X msg 146 465 \$1 100 2;
 #X text -65 141 Cuenta de 0 a 7 \; Cuenta los grados de la escala;
 #X text -88 280 Agarra el elemento del 0 al 7 \; del indice del modo;
-#X obj 287 316 - 24;
 #X text 334 315 Baja 2 octavas;
 #X text 334 92 counter que recibe un bang cada vez que el numero \; de %7 cambie, f 25;
 #X text 443 173 cuenta del 0 al 8 por groove del bass;
@@ -33,9 +32,10 @@
 #X text 307 32 Arroja un bang cada corchea;
 #X text -52 92 Divide el bar en corcheas;
 #X text 557 242 cada vez que llegue a 0 repite;
+#X obj 287 316 - 36;
 #X connect 0 0 1 0;
 #X connect 1 0 3 0;
-#X connect 2 0 23 0;
+#X connect 2 0 33 0;
 #X connect 3 0 12 0;
 #X connect 4 0 16 0;
 #X connect 4 0 18 0;
@@ -56,4 +56,4 @@
 #X connect 19 0 12 1;
 #X connect 19 0 13 0;
 #X connect 20 0 5 0;
-#X connect 23 0 3 1;
+#X connect 33 0 3 1;
