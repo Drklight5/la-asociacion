@@ -26,7 +26,7 @@ PD_EXE=
 REAPER_EXE=
 
 # Que se abre al arrancar (rutas relativas a la raiz del repo):
-PD_PATCH=pureDataPatch-v0.6/subpatches/1-Draft.pd
+PD_PATCH=pureDataPatch-v0.7/1-Draft.pd
 REAPER_PROJECT=reaperProject.RPP
 
 # ReaScript de autoplay: se corre en Reaper unos segundos despues de abrir el
