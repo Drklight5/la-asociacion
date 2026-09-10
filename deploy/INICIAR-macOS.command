@@ -27,7 +27,7 @@ ABRIR_NAVEGADOR="si"
 BRIDGE_PORT=9001
 PD_PORT=9000
 WEB_PORT=8000
-PD_PATCH="pureDataPatch-v0.6/subpatches/1-Draft.pd"
+PD_PATCH="pureDataPatch-v0.7/1-Draft.pd"
 REAPER_PROJECT="reaperProject.RPP"
 CERRAR_TODO="si"
 
