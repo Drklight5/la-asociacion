@@ -30,7 +30,8 @@ pip install -r requirements.txt
 ## 2. Conectar el Muse 2 (BLE → LSL)
 
 **Windows** — usar [BlueMuse](https://github.com/kowalej/BlueMuse): conectar el
-Muse 2 ahí y darle "Start Streaming". Si querés `movement`/`bpm` reales,
+Muse 2 ahí y darle "Start Streaming". Si querés `movement`/`bpm` reales y los
+ejes crudos `/eeg/gyro/*` `/eeg/accel/*` (para viz/ y el patch de Pd),
 habilitar ACC/GYRO/PPG en la configuración de BlueMuse antes de streamear.
 
 **macOS** (Apple Silicon, sin apps extra):
@@ -41,7 +42,8 @@ muselsl stream --name "Muse-XXXX" --acc --gyro --ppg
 > agregar python3 -m al comando si no funciona 
 
 (`--acc --gyro --ppg` son opcionales — sin ellos, el productor igual manda el
-protocolo completo, con `movement=0` y `bpm` fijo. Ver [3. Correrlo](#3-correrlo).)
+protocolo completo, con `movement=0`, `bpm` fijo y los ejes `/eeg/gyro/*` /
+`/eeg/accel/*` del stream que falte en `0`. Ver [3. Correrlo](#3-correrlo).)
 
 ## 3. Correrlo
 
@@ -58,7 +60,10 @@ Mismos comandos que el simulador mientras corre (`kick`, `skip`, `reset`, `quit`
 1. La persona se pone el Muse. El operador escribe `reset` + Enter.
 2. Arranca la calibración (`--calibration`, default 60 s). Se ignoran los
    primeros `--calib-settle` s (default 10) mientras los electrodos secos se
-   asientan. La persona escucha la explicación.
+   asientan. La persona escucha la explicación **quieta** — esto importa: si se
+   mueve mientras calibra, el baseline queda inflado en delta/theta y después
+   todo se ve invertido (delta/theta abajo, beta/gamma arriba). Medido: calibrar
+   quieta elimina la inversión sin costar rango.
 3. Al terminar, la consola imprime un reporte: `baseline OK: ...` o
    `!!! CALIDAD DUDOSA ...`. Si sale dudosa → reacomodar el Muse y `reset`.
 4. `moment` pasa a `operando`. La persona patea → `movimiento_abrupto` (las
