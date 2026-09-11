@@ -2,7 +2,12 @@
 
 Gráfica de líneas en tiempo real de las 5 bandas (delta / theta / alfa / beta /
 gamma) + animaciones que acompañan (fondo reactivo, partículas, pulso de BPM,
-glitch en la patada). Corre en el navegador (p5.js), consumo bajo.
+glitch en la patada), cubos 3D interpuestos en primer plano que rotan con el
+giroscopio (`/eeg/gyro/x|y|z` en grados/s crudos; también llega
+`/eeg/accel/x|y|z` en g — ver tabla en el [README](../README.md) del proyecto)
+y laten con el bpm, y una barra inferior (tecla `l`) con el
+icono+color de cada banda — tamaño = valor, así la dominante se lee sola — y
+un corazón con el bpm. Corre en el navegador (p5.js), consumo bajo.
 
 ```
 productor / simulador                bridge.py                      Pure Data
