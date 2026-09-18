@@ -4,7 +4,7 @@
 # --- Muse (solo macOS) -------------------------------------------------------
 # Nombre del Muse. Dejar vacio si hay un solo Muse encendido cerca.
 # Para verlo:  .venv/bin/muselsl list
-MUSE_NAME=
+MUSE_NAME=MUSE-3659
 
 # Flags del puente Bluetooth de macOS (muselsl). --acc --gyro --ppg habilitan
 # movimiento y ritmo cardiaco reales. Quitar alguno si tu Muse no lo soporta.
