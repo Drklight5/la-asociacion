@@ -7,5 +7,5 @@
 
 if (reaper.GetPlayState() & 1) == 0 then
   reaper.Main_OnCommand(40042, 0)  -- Transport: Go to start of project
-  reaper.Main_OnCommand(1007, 0)   -- Transport: Play
+  reaper.Main_OnCommand(1013, 0)   -- Transport: Record
 end
