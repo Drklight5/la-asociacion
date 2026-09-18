@@ -6,3 +6,6 @@ node_modules/
 .venv/
 __pycache__/
 *.pyc
+
+# grabaciones crudas de EEG (dato biometrico personal, generadas por diagnostico/)
+*.npz
